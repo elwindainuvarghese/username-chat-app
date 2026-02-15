@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 import 'screens/welcome_screen.dart';
 import 'screens/home_screen.dart';
+import 'screens/auth/login_screen.dart';
+import 'screens/auth/signup_screen.dart';
+import 'screens/auth/recovery_phrase_screen.dart';
+import 'screens/auth/recover_account_screen.dart';
 import 'services/auth_service.dart';
 
 // Simple Theme Notifier for global state
@@ -116,6 +120,31 @@ class _MyAppState extends State<MyApp> {
           ),
 
           // Routing Logic
+          initialRoute: _isLoggedIn == null
+              ? '/loading'
+              : (_isLoggedIn! ? '/home' : '/welcome'),
+          routes: {
+            '/welcome': (context) => const WelcomeScreen(),
+            '/login': (context) => const LoginScreen(),
+            '/signup': (context) => const SignupScreen(),
+            '/home': (context) => const HomeScreen(),
+            '/recover': (context) => const RecoverAccountScreen(),
+          },
+          onGenerateRoute: (settings) {
+            switch (settings.name) {
+              case '/recovery-phrase':
+                final args = settings.arguments as Map<String, dynamic>?;
+                return MaterialPageRoute(
+                  builder: (_) => RecoveryPhraseScreen(
+                    username: args?['username'] ?? 'User',
+                  ),
+                );
+              default:
+                return MaterialPageRoute(
+                  builder: (_) => const WelcomeScreen(),
+                );
+            }
+          },
           home: _isLoggedIn == null
               ? const Scaffold(
                   backgroundColor: Color(0xFF121212),
@@ -123,7 +152,7 @@ class _MyAppState extends State<MyApp> {
                     child: CircularProgressIndicator(color: Colors.white),
                   ),
                 )
-              : (_isLoggedIn! ? const HomeScreen() : const WelcomeScreen()),
+              : null, // Use initialRoute instead
         );
       },
     );

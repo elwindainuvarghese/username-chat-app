@@ -1,6 +1,7 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
-import 'package:username_chat_app/screens/login_screen.dart';
+import 'auth/login_screen.dart';
+import 'auth/signup_screen.dart';
 import '../widgets/glass_container.dart';
 import '../main.dart'; // For themeNotifier
 
@@ -204,7 +205,7 @@ class _WelcomeScreenState extends State<WelcomeScreen>
 
                         const SizedBox(height: 40),
 
-                        // Get Started Button
+                        // Get Started Button (Login)
                         GestureDetector(
                           onTap: () {
                             Navigator.push(
@@ -245,9 +246,60 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                             ),
                             child: Center(
                               child: Text(
-                                "Get Started",
+                                "Login",
                                 style: TextStyle(
                                   color: isDark ? Colors.black : Colors.white,
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+
+                        const SizedBox(height: 16),
+
+                        // Create Account Button
+                        GestureDetector(
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              PageRouteBuilder(
+                                pageBuilder:
+                                    (context, animation, secondaryAnimation) =>
+                                        const SignupScreen(),
+                                transitionsBuilder:
+                                    (
+                                      context,
+                                      animation,
+                                      secondaryAnimation,
+                                      child,
+                                    ) {
+                                      return FadeTransition(
+                                        opacity: animation,
+                                        child: child,
+                                      );
+                                    },
+                              ),
+                            );
+                          },
+                          child: Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.symmetric(vertical: 18),
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(30),
+                              border: Border.all(
+                                color: isDark ? Colors.white.withOpacity(0.3) 
+                                              : Colors.black.withOpacity(0.3),
+                                width: 1.5,
+                              ),
+                              color: Colors.transparent,
+                            ),
+                            child: Center(
+                              child: Text(
+                                "Create Account",
+                                style: TextStyle(
+                                  color: isDark ? Colors.white : Colors.black,
                                   fontSize: 18,
                                   fontWeight: FontWeight.bold,
                                 ),

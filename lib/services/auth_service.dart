@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math';
 import 'package:cryptography/cryptography.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
@@ -78,5 +79,137 @@ class AuthService {
   Future<void> logout() async {
     await storage.delete(key: _privateKeyStorageKey);
     await storage.delete(key: _usernameStorageKey);
+  }
+
+  // ============== NEW AUTHENTICATION METHODS ==============
+  // These are placeholder methods for Firebase integration later
+  
+  /// Login with username and password
+  /// TODO: Connect to Firebase Authentication
+  Future<Map<String, dynamic>> login(String username, String password) async {
+    // Placeholder implementation
+    // Firebase will handle password verification
+    print("LOGIN: Username: $username, Password: [HIDDEN]");
+    
+    // Mock delay for UI testing
+    await Future.delayed(const Duration(seconds: 2));
+    
+    // For now, simulate successful login
+    // TODO: Replace with Firebase Auth login logic
+    await saveUsername(username);
+    await storage.write(key: _privateKeyStorageKey, value: 'mock_private_key');
+    
+    return {
+      'success': true,
+      'message': 'Login successful',
+      'user': {'username': username}
+    };
+  }
+  
+  /// Sign up new user with username and password
+  /// TODO: Connect to Firebase Authentication  
+  Future<Map<String, dynamic>> signup(String username, String password, String confirmPassword) async {
+    // Placeholder implementation
+    print("SIGNUP: Username: $username");
+    
+    // Basic validation
+    if (password != confirmPassword) {
+      return {
+        'success': false,
+        'message': 'Passwords do not match'
+      };
+    }
+    
+    if (username.trim().isEmpty || password.trim().isEmpty) {
+      return {
+        'success': false,
+        'message': 'Username and password cannot be empty'
+      };
+    }
+    
+    // Mock delay for UI testing
+    await Future.delayed(const Duration(seconds: 2));
+    
+    // TODO: Replace with Firebase Auth signup logic
+    // For now, create the user locally
+    final userId = await registerNewUser(username: username);
+    
+    return {
+      'success': true,
+      'message': 'Account created successfully',
+      'user': {'username': username, 'userId': userId}
+    };
+  }
+  
+  /// Recover account using recovery phrase
+  /// TODO: Connect to Firebase and recovery phrase logic
+  Future<Map<String, dynamic>> recoverWithPhrase(String recoveryPhrase) async {
+    print("RECOVER: Recovery phrase provided");
+    
+    // Basic validation
+    final words = recoveryPhrase.trim().split(RegExp(r'\s+'));
+    if (words.length != 16) {
+      return {
+        'success': false,
+        'message': 'Recovery phrase must contain exactly 16 words'
+      };
+    }
+    
+    // Mock delay for UI testing
+    await Future.delayed(const Duration(seconds: 3));
+    
+    // TODO: Replace with actual recovery phrase validation
+    // For now, simulate successful recovery
+    await saveUsername('RecoveredUser');
+    await storage.write(key: _privateKeyStorageKey, value: 'recovered_private_key');
+    
+    return {
+      'success': true,
+      'message': 'Account recovered successfully',
+      'user': {'username': 'RecoveredUser'}
+    };
+  }
+  
+  /// Generate mock recovery phrase (16 words)
+  /// TODO: Replace with actual cryptographic recovery phrase generation
+  List<String> generateRecoveryPhrase() {
+    // Mock word list for demonstration (BIP39 style words)
+    final words = [
+      'abandon', 'ability', 'able', 'about', 'above', 'absent', 'absorb', 
+      'abstract', 'absurd', 'abuse', 'access', 'accident', 'account', 
+      'accuse', 'achieve', 'acid', 'acoustic', 'acquire', 'across', 'act',
+      'action', 'actor', 'actress', 'actual', 'adapt', 'add', 'addict', 
+      'address', 'adjust', 'admit', 'adult', 'advance', 'advice', 'aerobic', 
+      'affair', 'afford', 'afraid', 'again', 'against', 'agent', 'agree',
+      'ahead', 'aim', 'air', 'airport', 'aisle', 'alarm', 'album', 'alcohol',
+      'alert', 'alien', 'all', 'alley', 'allow', 'almost', 'alone', 'alpha',
+      'already', 'also', 'alter', 'always', 'amateur', 'amazing', 'among',
+      'amount', 'amused', 'analyst', 'anchor', 'ancient', 'anger', 'angle',
+      'angry', 'animal', 'ankle', 'announce', 'annual', 'another', 'answer',
+      'antenna', 'antique', 'anxiety', 'any', 'apart', 'apology', 'appear',
+      'apple', 'approve', 'april', 'area', 'arena', 'argue', 'arm', 'armed',
+      'armor', 'army', 'around', 'arrange', 'arrest', 'arrive', 'arrow', 
+      'art', 'article', 'artist', 'artwork', 'ask', 'aspect', 'assault', 
+      'asset', 'assist', 'assume', 'asthma', 'athlete', 'atom', 'attack'
+    ];
+    
+    // Create a proper random instance with a seed for this user session
+    final random = Random(DateTime.now().microsecondsSinceEpoch);
+    
+    // Generate 16 unique random words
+    final phrase = <String>[];
+    final usedIndices = <int>{}; // To ensure no duplicate words
+    
+    while (phrase.length < 16) {
+      final index = random.nextInt(words.length);
+      if (!usedIndices.contains(index)) {
+        usedIndices.add(index);
+        phrase.add(words[index]);
+      }
+    }
+    
+    print("GENERATED RECOVERY PHRASE: ${phrase.join(' ')}");
+    print("FIRST 3 WORDS: ${phrase.take(3).join(', ')}"); // Extra debug
+    return phrase;
   }
 }
