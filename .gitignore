@@ -46,3 +46,10 @@ app.*.map.json
 
 # Secrets
 lib/core/secrets.dart
+node_modules
+
+node/
+node.msi
+node.zip
+firebase.exe
+run_firebase_login.ps1

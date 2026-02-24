@@ -7,6 +7,7 @@ import '../widgets/glass_container.dart';
 import '../services/auth_service.dart';
 import 'welcome_screen.dart';
 import '../main.dart';
+import 'chat_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -236,7 +237,17 @@ class _HomeScreenState extends State<HomeScreen> {
                     color: Colors.transparent,
                     child: InkWell(
                       borderRadius: BorderRadius.circular(18),
-                      onTap: () {}, // Go to Chat
+                      onTap: () {
+                        // Navigate to the Chat Screen with the selected user
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => ChatScreen(
+                              chatWithUser: index == 0 ? "Yourself" : "User ${index + 1}",
+                            ),
+                          ),
+                        );
+                      }, // Go to Chat
                       child: Padding(
                         padding: const EdgeInsets.all(16),
                         child: Row(
