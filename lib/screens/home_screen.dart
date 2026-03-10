@@ -7,6 +7,8 @@ import '../widgets/glass_container.dart';
 import '../services/auth_service.dart';
 import 'welcome_screen.dart';
 import '../main.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import '../services/chat_service.dart';
 import 'chat_screen.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -224,128 +226,127 @@ class _HomeScreenState extends State<HomeScreen> {
 
         // 3. Chat List
         Expanded(
-          child: ListView.builder(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-            itemCount: 8,
-            itemBuilder: (context, index) {
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child: GlassContainer(
-                  // Use defaults for Frosty Look: Blur 25, Opacity 0.12, Border 1.2
-                  borderRadius: 18,
-                  child: Material(
-                    color: Colors.transparent,
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(18),
-                      onTap: () {
-                        // Navigate to the Chat Screen with the selected user
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => ChatScreen(
-                              chatWithUser: index == 0 ? "Yourself" : "User ${index + 1}",
-                            ),
-                          ),
-                        );
-                      }, // Go to Chat
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Row(
-                          children: [
-                            // Avatar
-                            CircleAvatar(
-                              radius: 25,
-                              backgroundColor: Colors.white.withOpacity(0.1),
-                              child: Icon(
-                                Icons.person,
-                                color: textColor.withOpacity(0.5),
-                              ),
-                            ),
-                            const SizedBox(width: 15),
+          child: StreamBuilder<QuerySnapshot>(
+            stream: ChatService().getContactsStream(),
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const Center(child: CircularProgressIndicator());
+              }
 
-                            // Name & Msg
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    index == 0
-                                        ? "$_username (You)"
-                                        : "User ${index + 1}",
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 16,
-                                      color: textColor,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    index == 0
-                                        ? "Message to yourself"
-                                        : "Hey, are you free tonight?",
-                                    style: TextStyle(
-                                      color: textColor.withOpacity(0.6),
-                                      fontSize: 14,
-                                    ),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ],
-                              ),
-                            ),
+              if (snapshot.hasError) {
+                return const Center(child: Text('Error loading contacts'));
+              }
 
-                            // Time & Status
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.end,
-                              children: [
-                                Text(
-                                  "10:30 PM",
-                                  style: TextStyle(
-                                    color: index == 1
-                                        ? const Color(0xFF00A884)
-                                        : textColor.withOpacity(
-                                            0.4,
-                                          ), // Green if unread
-                                    fontSize: 12,
-                                    fontWeight: index == 1
-                                        ? FontWeight.bold
-                                        : FontWeight.normal,
-                                  ),
+              if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                return Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.person_search, size: 64, color: textColor.withOpacity(0.3)),
+                      const SizedBox(height: 16),
+                      Text(
+                        'No contacts yet.',
+                        style: TextStyle(color: textColor.withOpacity(0.6), fontSize: 16),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Tap the + button to search and add friends!',
+                        style: TextStyle(color: textColor.withOpacity(0.4), fontSize: 14),
+                      ),
+                    ],
+                  ),
+                );
+              }
+
+              final contacts = snapshot.data!.docs;
+
+              return ListView.builder(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                itemCount: contacts.length,
+                itemBuilder: (context, index) {
+                  final contact = contacts[index].data() as Map<String, dynamic>;
+                  final isUnread = index == 0; // Keeping some mock UI state for demonstration
+
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: GlassContainer(
+                      borderRadius: 18,
+                      child: Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(18),
+                          onTap: () {
+                            // Navigate to the Chat Screen with the selected user
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => ChatScreen(
+                                  chatWithUser: contact['displayName'] ?? 'User',
+                                  receiverId: contact['uid'],
                                 ),
-                                const SizedBox(height: 6),
-                                if (index == 0)
-                                  Icon(
-                                    Icons.push_pin,
-                                    size: 16,
+                              ),
+                            );
+                          }, // Go to Chat
+                          child: Padding(
+                            padding: const EdgeInsets.all(16),
+                            child: Row(
+                              children: [
+                                // Avatar
+                                CircleAvatar(
+                                  radius: 25,
+                                  backgroundColor: Colors.white.withOpacity(0.1),
+                                  child: Icon(
+                                    Icons.person,
                                     color: textColor.withOpacity(0.5),
                                   ),
-                                if (index == 1)
-                                  Container(
-                                    width: 20,
-                                    height: 20,
-                                    decoration: const BoxDecoration(
-                                      color: Color(0xFF00A884),
-                                      shape: BoxShape.circle,
-                                    ),
-                                    child: const Center(
-                                      child: Text(
-                                        "2",
+                                ),
+                                const SizedBox(width: 15),
+
+                                // Name & Msg
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        contact['displayName'] ?? 'Unknown User',
                                         style: TextStyle(
-                                          color: Colors.black,
-                                          fontSize: 10,
                                           fontWeight: FontWeight.bold,
+                                          fontSize: 16,
+                                          color: textColor,
                                         ),
                                       ),
-                                    ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        contact['email'] ?? '',
+                                        style: TextStyle(
+                                          color: textColor.withOpacity(0.6),
+                                          fontSize: 14,
+                                        ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ],
                                   ),
+                                ),
+
+                                // Time & Status
+                                Column(
+                                  crossAxisAlignment: CrossAxisAlignment.end,
+                                  children: [
+                                    Icon(
+                                      Icons.chevron_right,
+                                      color: textColor.withOpacity(0.3),
+                                    )
+                                  ],
+                                ),
                               ],
                             ),
-                          ],
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                ),
+                  );
+                },
               );
             },
           ),

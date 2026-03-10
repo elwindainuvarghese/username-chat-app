@@ -12,17 +12,25 @@ class SignupScreen extends StatefulWidget {
 
 class _SignupScreenState extends State<SignupScreen> {
   final _formKey = GlobalKey<FormState>();
+  final _emailController = TextEditingController();
   final _usernameController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
-  final AuthService _authService = AuthService();
+  late final AuthService _authService;
   
   bool _isPasswordVisible = false;
   bool _isConfirmPasswordVisible = false;
   bool _isLoading = false;
 
   @override
+  void initState() {
+    super.initState();
+    _authService = AuthService();
+  }
+
+  @override
   void dispose() {
+    _emailController.dispose();
     _usernameController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
@@ -36,6 +44,7 @@ class _SignupScreenState extends State<SignupScreen> {
 
     try {
       final result = await _authService.signup(
+        _emailController.text.trim(),
         _usernameController.text.trim(),
         _passwordController.text,
         _confirmPasswordController.text,
@@ -55,26 +64,41 @@ class _SignupScreenState extends State<SignupScreen> {
         }
       } else {
         if (mounted) {
-          _showErrorSnackBar(result['message'] ?? 'Signup failed');
+          _showErrorDialog(result['message'] ?? 'Signup failed');
         }
       }
     } catch (e) {
       if (mounted) {
-        _showErrorSnackBar('An error occurred. Please try again.');
+        _showErrorDialog('An error occurred. Please try again.\n\nDetails: $e');
       }
     }
 
     if (mounted) setState(() => _isLoading = false);
   }
 
-  void _showErrorSnackBar(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: Colors.redAccent,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      ),
+  void _showErrorDialog(String message) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        final isDark = Theme.of(context).brightness == Brightness.dark;
+        return AlertDialog(
+          backgroundColor: isDark ? const Color(0xFF1F1F2E) : Colors.white,
+          title: Text(
+            'Signup Error',
+            style: TextStyle(color: isDark ? Colors.white : Colors.black),
+          ),
+          content: SelectableText(
+            message,
+            style: TextStyle(color: isDark ? Colors.white70 : Colors.black87),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('OK', style: TextStyle(color: Colors.redAccent)),
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -186,6 +210,42 @@ class _SignupScreenState extends State<SignupScreen> {
                           key: _formKey,
                           child: Column(
                             children: [
+                              // Email Field
+                              TextFormField(
+                                controller: _emailController,
+                                style: TextStyle(color: textColor),
+                                keyboardType: TextInputType.emailAddress,
+                                decoration: InputDecoration(
+                                  labelText: 'Email',
+                                  labelStyle: TextStyle(
+                                    color: textColor.withOpacity(0.7),
+                                  ),
+                                  prefixIcon: Icon(
+                                    Icons.email_outlined,
+                                    color: textColor.withOpacity(0.7),
+                                  ),
+                                  filled: true,
+                                  fillColor: isDark
+                                      ? Colors.white.withOpacity(0.05)
+                                      : Colors.black.withOpacity(0.03),
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(16),
+                                    borderSide: BorderSide.none,
+                                  ),
+                                ),
+                                validator: (value) {
+                                  if (value?.trim().isEmpty ?? true) {
+                                    return 'Please enter your email';
+                                  }
+                                  if (!value!.contains('@')) {
+                                    return 'Please enter a valid email';
+                                  }
+                                  return null;
+                                },
+                              ),
+
+                              const SizedBox(height: 16),
+
                               // Username Field
                               TextFormField(
                                 controller: _usernameController,

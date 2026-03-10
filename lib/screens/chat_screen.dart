@@ -1,11 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../services/auth_service.dart';
+import '../services/chat_service.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_core/firebase_core.dart';
 
 class ChatScreen extends StatefulWidget {
   final String chatWithUser;
+  final String receiverId;
 
-  const ChatScreen({super.key, required this.chatWithUser});
+  const ChatScreen({
+    super.key, 
+    required this.chatWithUser,
+    required this.receiverId,
+  });
 
   @override
   State<ChatScreen> createState() => _ChatScreenState();
@@ -13,22 +21,15 @@ class ChatScreen extends StatefulWidget {
 
 class _ChatScreenState extends State<ChatScreen> {
   final TextEditingController _messageController = TextEditingController();
-  final AuthService _authService = AuthService();
-  String _currentUser = 'User';
+  final ChatService _chatService = ChatService();
+  final String _currentUid = FirebaseAuth.instanceFor(app: Firebase.app()).currentUser?.uid ?? '';
+  
+  late String _chatRoomId;
 
   @override
   void initState() {
     super.initState();
-    _loadUser();
-  }
-
-  Future<void> _loadUser() async {
-    final name = await _authService.getUsername();
-    if (name != null && mounted) {
-      setState(() {
-        _currentUser = name;
-      });
-    }
+    _chatRoomId = _chatService.getChatRoomId(_currentUid, widget.receiverId);
   }
 
   void _sendMessage() async {
@@ -37,12 +38,7 @@ class _ChatScreenState extends State<ChatScreen> {
     final text = _messageController.text;
     _messageController.clear(); // Clear immediately for UX
 
-    await FirebaseFirestore.instance.collection('messages').add({
-      'text': text,
-      'senderId': _currentUser,
-      'receiverId': widget.chatWithUser,
-      'timestamp': FieldValue.serverTimestamp(),
-    });
+    await _chatService.sendMessage(widget.receiverId, widget.chatWithUser, text);
   }
 
   @override
@@ -60,10 +56,7 @@ class _ChatScreenState extends State<ChatScreen> {
         children: [
           Expanded(
             child: StreamBuilder<QuerySnapshot>(
-              stream: FirebaseFirestore.instance
-                  .collection('messages')
-                  .orderBy('timestamp', descending: true)
-                  .snapshots(),
+              stream: _chatService.getMessages(_chatRoomId),
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return const Center(child: CircularProgressIndicator());
@@ -85,25 +78,7 @@ class _ChatScreenState extends State<ChatScreen> {
                   );
                 }
 
-                // Filter messages client-side for simplicity in demo
-                // (In production, use where() in the Firestore query)
-                final allMessages = snapshot.data!.docs;
-                final chatMessages = allMessages.where((doc) {
-                  final data = doc.data() as Map<String, dynamic>;
-                  final sender = data['senderId'] as String?;
-                  final receiver = data['receiverId'] as String?;
-                  
-                  return (sender == _currentUser && receiver == widget.chatWithUser) ||
-                         (sender == widget.chatWithUser && receiver == _currentUser);
-                }).toList();
-
-                if (chatMessages.isEmpty) {
-                  return Center(
-                    child: Text('No messages with ${widget.chatWithUser} yet.', 
-                      style: TextStyle(color: textColor.withOpacity(0.6))
-                    )
-                  );
-                }
+                final chatMessages = snapshot.data!.docs;
 
                 return ListView.builder(
                   reverse: true, // Start from bottom
@@ -111,7 +86,7 @@ class _ChatScreenState extends State<ChatScreen> {
                   itemCount: chatMessages.length,
                   itemBuilder: (context, index) {
                     final messageData = chatMessages[index].data() as Map<String, dynamic>;
-                    final isMe = messageData['senderId'] == _currentUser;
+                    final isMe = messageData['senderId'] == _currentUid;
                     
                     return Align(
                       alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,

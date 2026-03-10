@@ -1,204 +1,145 @@
-import 'dart:convert';
 import 'dart:math';
-import 'package:cryptography/cryptography.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
+import 'package:firebase_core/firebase_core.dart';
+
 class AuthService {
-  // Use Ed25519 (Modern, fast, and very secure)
-  final algorithm = Ed25519();
+  final FirebaseAuth _auth = FirebaseAuth.instanceFor(app: Firebase.app());
+  final FirebaseFirestore _firestore = FirebaseFirestore.instanceFor(app: Firebase.app());
   final storage = const FlutterSecureStorage();
 
-  // Key for storage
-  static const _privateKeyStorageKey = 'user_private_key';
   static const _usernameStorageKey = 'user_display_name';
-
-  /// Generates a new key pair and stores the private key securely.
-  /// Returns the Base64 encoded public key (User ID).
-  Future<String> registerNewUser({String? username}) async {
-    // 1. Generate the Key Pair
-    final keyPair = await algorithm.newKeyPair();
-
-    // 2. Extract Keys
-    // The Private Key (Keep this SAFE!)
-    final privateKeyBytes = await keyPair.extractPrivateKeyBytes();
-
-    // The Public Key (This becomes the User ID)
-    final publicKey = await keyPair.extractPublicKey();
-    final publicKeyBytes = publicKey.bytes;
-
-    // 3. Store Private Key Securely
-    // We encode it to Base64 to store it as a string
-    await storage.write(
-      key: _privateKeyStorageKey,
-      value: base64Encode(privateKeyBytes),
-    );
-
-    if (username != null) {
-      await storage.write(key: _usernameStorageKey, value: username);
-    }
-
-    // Log for verification
-    final userId = base64Encode(publicKeyBytes);
-    print("User Registered. ID: $userId");
-
-    return userId;
-  }
-
-  /// Checks if a user is already registered (private key exists).
-  Future<bool> isLoggedIn() async {
-    final privateKey = await storage.read(key: _privateKeyStorageKey);
-    return privateKey != null;
-  }
-
-  /// Retrieves the current user's Public Key (ID) if logged in.
-  Future<String?> getPublicKey() async {
-    final privateKeyBase64 = await storage.read(key: _privateKeyStorageKey);
-    if (privateKeyBase64 == null) return null;
-
-    try {
-      final privateKeyBytes = base64Decode(privateKeyBase64);
-      // Reconstruct key pair from private key bytes to get public key
-      final keyPair = await algorithm.newKeyPairFromSeed(privateKeyBytes);
-      final publicKey = await keyPair.extractPublicKey();
-      return base64Encode(publicKey.bytes);
-    } catch (e) {
-      print("Error retrieving public key: $e");
-      return null;
-    }
-  }
-
-  Future<String?> getUsername() async {
-    return await storage.read(key: _usernameStorageKey);
-  }
 
   Future<void> saveUsername(String name) async {
     await storage.write(key: _usernameStorageKey, value: name);
   }
 
-  /// Clear session (Logout logic if needed)
+  Future<String?> getUsername() async {
+    final user = _auth.currentUser;
+    if (user != null) {
+      if (user.displayName != null && user.displayName!.isNotEmpty) {
+        return user.displayName;
+      }
+      // Fetch from firestore if not in Auth object
+      try {
+        final doc = await _firestore.collection('users').doc(user.uid).get();
+        if (doc.exists) {
+          return doc.data()?['displayName'] as String?;
+        }
+      } catch (e) {
+        // ignore
+      }
+    }
+    return await storage.read(key: _usernameStorageKey);
+  }
+
+  /// Expose the stream of authentication state changes
+  Stream<User?> get authStateChanges => _auth.authStateChanges();
+
+  /// Sign up new user with email, password, and username
+  Future<Map<String, dynamic>> signup(String email, String username, String password, String confirmPassword) async {
+    if (password != confirmPassword) {
+      return {'success': false, 'message': 'Passwords do not match'};
+    }
+    
+    if (email.trim().isEmpty || username.trim().isEmpty || password.trim().isEmpty) {
+      return {'success': false, 'message': 'All fields are required'};
+    }
+
+    try {
+      // 1. Create Auth User
+      UserCredential userCredential = await _auth.createUserWithEmailAndPassword(
+        email: email.trim(), 
+        password: password,
+      );
+
+      final user = userCredential.user;
+      if (user != null) {
+        // 2. Update Auth display name
+        await user.updateDisplayName(username.trim());
+        // For waiting for changes
+        await user.reload(); 
+        
+        // 3. Create Firestore User Document
+        await _firestore.collection('users').doc(user.uid).set({
+          'uid': user.uid,
+          'email': email.trim(),
+          'displayName': username.trim(),
+          'createdAt': FieldValue.serverTimestamp(),
+        });
+
+        await saveUsername(username.trim());
+        return {'success': true, 'message': 'Account created successfully', 'user': user};
+      }
+      return {'success': false, 'message': 'Failed to create user account (user object was null)'};
+    } on FirebaseAuthException catch (e) {
+      return {'success': false, 'message': 'Firebase Error [${e.code}]: ${e.message}'};
+    } catch (e) {
+      return {'success': false, 'message': 'System Error: ${e.toString()}'};
+    }
+  }
+
+  /// Login with email and password
+  Future<Map<String, dynamic>> login(String email, String password) async {
+    if (email.trim().isEmpty || password.trim().isEmpty) {
+      return {'success': false, 'message': 'Email and password are required'};
+    }
+
+    try {
+      UserCredential userCredential = await _auth.signInWithEmailAndPassword(
+        email: email.trim(),
+        password: password,
+      );
+
+      final user = userCredential.user;
+      if (user != null) {
+        final username = user.displayName;
+        if (username != null) {
+          await saveUsername(username);
+        } else {
+            // Fetch username from Firestore if it's missing in Firebase Auth object
+            final doc = await _firestore.collection('users').doc(user.uid).get();
+            if (doc.exists && doc.data()!['displayName'] != null) {
+                await saveUsername(doc.data()!['displayName']);
+            }
+        }
+        return {'success': true, 'message': 'Login successful', 'user': user};
+      }
+      return {'success': false, 'message': 'Failed to login'};
+    } on FirebaseAuthException catch (e) {
+      return {'success': false, 'message': e.message ?? 'Invalid email or password'};
+    } catch (e) {
+      return {'success': false, 'message': e.toString()};
+    }
+  }
+
+  /// Log out
   Future<void> logout() async {
-    await storage.delete(key: _privateKeyStorageKey);
+    await _auth.signOut();
     await storage.delete(key: _usernameStorageKey);
   }
 
-  // ============== NEW AUTHENTICATION METHODS ==============
-  // These are placeholder methods for Firebase integration later
+  // ============== MOCK RECOVERY METHODS FOR EXISTING UI ==============
+  // Keeping these so the UI doesn't break, though they will be unused in Firebase Auth
   
-  /// Login with username and password
-  /// TODO: Connect to Firebase Authentication
-  Future<Map<String, dynamic>> login(String username, String password) async {
-    // Placeholder implementation
-    // Firebase will handle password verification
-    print("LOGIN: Username: $username, Password: [HIDDEN]");
-    
-    // Mock delay for UI testing
-    await Future.delayed(const Duration(seconds: 2));
-    
-    // For now, simulate successful login
-    // TODO: Replace with Firebase Auth login logic
-    await saveUsername(username);
-    await storage.write(key: _privateKeyStorageKey, value: 'mock_private_key');
-    
-    return {
-      'success': true,
-      'message': 'Login successful',
-      'user': {'username': username}
-    };
-  }
-  
-  /// Sign up new user with username and password
-  /// TODO: Connect to Firebase Authentication  
-  Future<Map<String, dynamic>> signup(String username, String password, String confirmPassword) async {
-    // Placeholder implementation
-    print("SIGNUP: Username: $username");
-    
-    // Basic validation
-    if (password != confirmPassword) {
-      return {
-        'success': false,
-        'message': 'Passwords do not match'
-      };
-    }
-    
-    if (username.trim().isEmpty || password.trim().isEmpty) {
-      return {
-        'success': false,
-        'message': 'Username and password cannot be empty'
-      };
-    }
-    
-    // Mock delay for UI testing
-    await Future.delayed(const Duration(seconds: 2));
-    
-    // TODO: Replace with Firebase Auth signup logic
-    // For now, create the user locally
-    final userId = await registerNewUser(username: username);
-    
-    return {
-      'success': true,
-      'message': 'Account created successfully',
-      'user': {'username': username, 'userId': userId}
-    };
-  }
-  
-  /// Recover account using recovery phrase
-  /// TODO: Connect to Firebase and recovery phrase logic
   Future<Map<String, dynamic>> recoverWithPhrase(String recoveryPhrase) async {
-    print("RECOVER: Recovery phrase provided");
-    
-    // Basic validation
-    final words = recoveryPhrase.trim().split(RegExp(r'\s+'));
-    if (words.length != 16) {
-      return {
-        'success': false,
-        'message': 'Recovery phrase must contain exactly 16 words'
-      };
-    }
-    
-    // Mock delay for UI testing
-    await Future.delayed(const Duration(seconds: 3));
-    
-    // TODO: Replace with actual recovery phrase validation
-    // For now, simulate successful recovery
-    await saveUsername('RecoveredUser');
-    await storage.write(key: _privateKeyStorageKey, value: 'recovered_private_key');
-    
     return {
-      'success': true,
-      'message': 'Account recovered successfully',
-      'user': {'username': 'RecoveredUser'}
+      'success': false,
+      'message': 'Account recovery via phrase is deprecated. Please use Firebase Auth password reset.'
     };
   }
   
-  /// Generate mock recovery phrase (16 words)
-  /// TODO: Replace with actual cryptographic recovery phrase generation
   List<String> generateRecoveryPhrase() {
-    // Mock word list for demonstration (BIP39 style words)
     final words = [
       'abandon', 'ability', 'able', 'about', 'above', 'absent', 'absorb', 
       'abstract', 'absurd', 'abuse', 'access', 'accident', 'account', 
       'accuse', 'achieve', 'acid', 'acoustic', 'acquire', 'across', 'act',
-      'action', 'actor', 'actress', 'actual', 'adapt', 'add', 'addict', 
-      'address', 'adjust', 'admit', 'adult', 'advance', 'advice', 'aerobic', 
-      'affair', 'afford', 'afraid', 'again', 'against', 'agent', 'agree',
-      'ahead', 'aim', 'air', 'airport', 'aisle', 'alarm', 'album', 'alcohol',
-      'alert', 'alien', 'all', 'alley', 'allow', 'almost', 'alone', 'alpha',
-      'already', 'also', 'alter', 'always', 'amateur', 'amazing', 'among',
-      'amount', 'amused', 'analyst', 'anchor', 'ancient', 'anger', 'angle',
-      'angry', 'animal', 'ankle', 'announce', 'annual', 'another', 'answer',
-      'antenna', 'antique', 'anxiety', 'any', 'apart', 'apology', 'appear',
-      'apple', 'approve', 'april', 'area', 'arena', 'argue', 'arm', 'armed',
-      'armor', 'army', 'around', 'arrange', 'arrest', 'arrive', 'arrow', 
-      'art', 'article', 'artist', 'artwork', 'ask', 'aspect', 'assault', 
-      'asset', 'assist', 'assume', 'asthma', 'athlete', 'atom', 'attack'
     ];
-    
-    // Create a proper random instance with a seed for this user session
     final random = Random(DateTime.now().microsecondsSinceEpoch);
-    
-    // Generate 16 unique random words
     final phrase = <String>[];
-    final usedIndices = <int>{}; // To ensure no duplicate words
+    final usedIndices = <int>{};
     
     while (phrase.length < 16) {
       final index = random.nextInt(words.length);
@@ -207,9 +148,6 @@ class AuthService {
         phrase.add(words[index]);
       }
     }
-    
-    print("GENERATED RECOVERY PHRASE: ${phrase.join(' ')}");
-    print("FIRST 3 WORDS: ${phrase.take(3).join(', ')}"); // Extra debug
     return phrase;
   }
 }

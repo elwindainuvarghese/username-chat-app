@@ -8,6 +8,7 @@ import 'screens/auth/signup_screen.dart';
 import 'screens/auth/recovery_phrase_screen.dart';
 import 'screens/auth/recover_account_screen.dart';
 import 'services/auth_service.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 // Simple Theme Notifier for global state
 class ThemeNotifier extends ValueNotifier<ThemeMode> {
@@ -37,19 +38,21 @@ class MyApp extends StatefulWidget {
 }
 
 class _MyAppState extends State<MyApp> {
-  final AuthService _authService = AuthService();
+  late final AuthService _authService;
   bool? _isLoggedIn;
 
   @override
   void initState() {
     super.initState();
-    _checkLoginStatus();
-  }
-
-  Future<void> _checkLoginStatus() async {
-    final loggedIn = await _authService.isLoggedIn();
-    setState(() {
-      _isLoggedIn = loggedIn;
+    _authService = AuthService();
+    final auth = FirebaseAuth.instanceFor(app: Firebase.app());
+    _isLoggedIn = auth.currentUser != null;
+    auth.authStateChanges().listen((User? user) {
+      if (mounted) {
+        setState(() {
+          _isLoggedIn = user != null;
+        });
+      }
     });
   }
 

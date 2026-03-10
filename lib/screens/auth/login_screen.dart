@@ -13,16 +13,22 @@ class LoginScreen extends StatefulWidget {
 
 class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _usernameController = TextEditingController();
+  final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
-  final AuthService _authService = AuthService();
+  late final AuthService _authService;
   
   bool _isPasswordVisible = false;
   bool _isLoading = false;
 
   @override
+  void initState() {
+    super.initState();
+    _authService = AuthService();
+  }
+
+  @override
   void dispose() {
-    _usernameController.dispose();
+    _emailController.dispose();
     _passwordController.dispose();
     super.dispose();
   }
@@ -34,7 +40,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
     try {
       final result = await _authService.login(
-        _usernameController.text.trim(),
+        _emailController.text.trim(),
         _passwordController.text,
       );
 
@@ -178,17 +184,18 @@ class _LoginScreenState extends State<LoginScreen> {
                           key: _formKey,
                           child: Column(
                             children: [
-                              // Username Field
+                              // Email Field
                               TextFormField(
-                                controller: _usernameController,
+                                controller: _emailController,
                                 style: TextStyle(color: textColor),
+                                keyboardType: TextInputType.emailAddress,
                                 decoration: InputDecoration(
-                                  labelText: 'Username',
+                                  labelText: 'Email',
                                   labelStyle: TextStyle(
                                     color: textColor.withOpacity(0.7),
                                   ),
                                   prefixIcon: Icon(
-                                    Icons.person_outline,
+                                    Icons.email_outlined,
                                     color: textColor.withOpacity(0.7),
                                   ),
                                   filled: true,
@@ -202,7 +209,10 @@ class _LoginScreenState extends State<LoginScreen> {
                                 ),
                                 validator: (value) {
                                   if (value?.trim().isEmpty ?? true) {
-                                    return 'Please enter your username';
+                                    return 'Please enter your email';
+                                  }
+                                  if (!value!.contains('@')) {
+                                    return 'Please enter a valid email';
                                   }
                                   return null;
                                 },
