@@ -2,14 +2,13 @@ import 'package:flutter/material.dart';
 import 'new_chat_screen.dart';
 import 'calls_screen.dart';
 import 'settings_screen.dart'; // NEW
+import 'chat_screen.dart';
 import 'image_detection_screen.dart';
 import '../widgets/glass_container.dart';
 import '../services/auth_service.dart';
 import 'welcome_screen.dart';
 import '../main.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import '../services/chat_service.dart';
-import 'chat_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -79,7 +78,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
-                      color: Colors.redAccent.withOpacity(0.1),
+                      color: Colors.redAccent.withValues(alpha: 0.1),
                       shape: BoxShape.circle,
                     ),
                     child: const Icon(
@@ -105,7 +104,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     "Are you sure you want to log out of Bit Chat?",
                     style: TextStyle(
                       fontSize: 14,
-                      color: textColor.withOpacity(0.7),
+                      color: textColor.withValues(alpha: 0.7),
                     ),
                     textAlign: TextAlign.center,
                   ),
@@ -120,7 +119,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           child: Text(
                             "Cancel",
                             style: TextStyle(
-                              color: textColor.withOpacity(0.7),
+                              color: textColor.withValues(alpha: 0.7),
                               fontSize: 16,
                             ),
                           ),
@@ -186,7 +185,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 Text(
                   "Ask Meta AI or Search",
                   style: TextStyle(
-                    color: textColor.withOpacity(0.6),
+                    color: textColor.withValues(alpha: 0.6),
                     fontSize: 15,
                   ),
                 ),
@@ -217,7 +216,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: Icon(
                   Icons.add,
                   size: 18,
-                  color: textColor.withOpacity(0.7),
+                  color: textColor.withValues(alpha: 0.7),
                 ),
               ),
             ],
@@ -226,6 +225,80 @@ class _HomeScreenState extends State<HomeScreen> {
 
         // 3. Chat List
         Expanded(
+<<<<<<< HEAD
+          child: ListView.builder(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            itemCount: 8,
+            itemBuilder: (context, index) {
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: GlassContainer(
+                  // Use defaults for Frosty Look: Blur 25, Opacity 0.12, Border 1.2
+                  borderRadius: 18,
+                  child: Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(18),
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => ChatScreen(
+                              chatName: index == 0 ? "$_username (You)" : "User ${index + 1}",
+                              heroTag: 'chat_avatar_$index',
+                            ),
+                          ),
+                        );
+                      },
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Row(
+                          children: [
+                            // Avatar
+                            Hero(
+                              tag: 'chat_avatar_$index',
+                              child: CircleAvatar(
+                                radius: 25,
+                                backgroundColor: Colors.white.withOpacity(0.1),
+                                child: Icon(
+                                  Icons.person,
+                                  color: textColor.withOpacity(0.5),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 15),
+
+                            // Name & Msg
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    index == 0
+                                        ? "$_username (You)"
+                                        : "User ${index + 1}",
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 16,
+                                      color: textColor,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    index == 0
+                                        ? "Message to yourself"
+                                        : "Hey, are you free tonight?",
+                                    style: TextStyle(
+                                      color: textColor.withValues(alpha: 0.6),
+                                      fontSize: 14,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ],
+                              ),
+                            ),
+=======
           child: StreamBuilder<QuerySnapshot>(
             stream: ChatService().getContactsStream(),
             builder: (context, snapshot) {
@@ -236,6 +309,7 @@ class _HomeScreenState extends State<HomeScreen> {
               if (snapshot.hasError) {
                 return const Center(child: Text('Error loading contacts'));
               }
+>>>>>>> a5099f42e1434efabf0e330d46296743204a0487
 
               if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
                 return Center(
@@ -284,6 +358,14 @@ class _HomeScreenState extends State<HomeScreen> {
                                   chatWithUser: contact['displayName'] ?? 'User',
                                   receiverId: contact['uid'],
                                 ),
+<<<<<<< HEAD
+                                const SizedBox(height: 6),
+                                if (index == 0)
+                                  Icon(
+                                    Icons.push_pin,
+                                    size: 16,
+                                    color: textColor.withValues(alpha: 0.5),
+=======
                               ),
                             );
                           }, // Go to Chat
@@ -298,6 +380,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                   child: Icon(
                                     Icons.person,
                                     color: textColor.withOpacity(0.5),
+>>>>>>> a5099f42e1434efabf0e330d46296743204a0487
                                   ),
                                 ),
                                 const SizedBox(width: 15),
@@ -577,8 +660,8 @@ class _HomeScreenState extends State<HomeScreen> {
           opacity: isDark ? 0.15 : 0.65,
           borderGradient: LinearGradient(
             colors: [
-              Colors.white.withOpacity(0.4),
-              Colors.white.withOpacity(0.05),
+              Colors.white.withValues(alpha: 0.4),
+              Colors.white.withValues(alpha: 0.05),
             ],
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
@@ -612,8 +695,8 @@ class _HomeScreenState extends State<HomeScreen> {
             decoration: isSelected
                 ? BoxDecoration(
                     color: isDark
-                        ? Colors.white.withOpacity(0.1)
-                        : Colors.black.withOpacity(0.05),
+                        ? Colors.white.withValues(alpha: 0.1)
+                        : Colors.black.withValues(alpha: 0.05),
                     borderRadius: BorderRadius.circular(20),
                   )
                 : null,

@@ -23,7 +23,7 @@ class CryptoService {
   Future<JSObject> generateSessionKey() async {
     if (!isSupported) throw Exception('Web Crypto not supported');
     final promise = _flutterCrypto!.callMethod('generateSessionKey'.toJS);
-    return (await promise.toDart)! as JSObject;
+    return (await (promise as JSPromise).toDart)! as JSObject;
   }
 
   /// Encrypts text using the session key
@@ -40,7 +40,7 @@ class CryptoService {
       sessionKey,
     );
 
-    final result = (await promise.toDart)! as JSObject;
+    final result = (await (promise as JSPromise).toDart)! as JSObject;
     // Extract properties
     // Note: This relies on result being a JS Object with properties we can read.
     // We might need to handle the conversion carefully.
@@ -68,6 +68,6 @@ class CryptoService {
       receiverPublicKey,
     );
 
-    return (await promise.toDart)! as JSUint8Array;
+    return (await (promise as JSPromise).toDart)! as JSUint8Array;
   }
 }
