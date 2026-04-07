@@ -824,7 +824,6 @@ class _ImageDetectionScreenState extends State<ImageDetectionScreen>
   Widget _buildLegacyWorkflowResults(Map<String, dynamic> result) {
     final summary = result['summary'];
     final action = summary?['action'] ?? 'unknown';
-    final isReject = action == 'reject';
     // ... extraction ...
     return GlassContainer(
       padding: const EdgeInsets.all(20),
@@ -885,44 +884,6 @@ class _ImageDetectionScreenState extends State<ImageDetectionScreen>
               backgroundColor: Colors.white.withOpacity(0.1),
               valueColor: AlwaysStoppedAnimation(barColor),
               minHeight: 8,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildCategoryRow(String label, double prob) {
-    if (prob < 0.01) return const SizedBox.shrink();
-
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 15.0),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              label,
-              style: const TextStyle(fontSize: 16, color: Colors.white70),
-            ),
-          ),
-          Text(
-            "${(prob * 100).toStringAsFixed(1)}%",
-            style: const TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              color: Colors.white,
-            ),
-          ),
-          const SizedBox(width: 10),
-          SizedBox(
-            width: 60,
-            height: 4,
-            child: LinearProgressIndicator(
-              value: prob,
-              backgroundColor: Colors.white10,
-              valueColor: AlwaysStoppedAnimation(
-                prob > 0.5 ? Colors.redAccent : Colors.white,
-              ),
             ),
           ),
         ],

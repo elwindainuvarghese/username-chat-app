@@ -6,6 +6,7 @@ import 'chat_screen.dart';
 import 'image_detection_screen.dart';
 import '../widgets/glass_container.dart';
 import '../services/auth_service.dart';
+import '../services/chat_service.dart';
 import 'welcome_screen.dart';
 import '../main.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -20,19 +21,10 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   int _selectedIndex = 0;
   final AuthService _authService = AuthService();
-  String _username = 'User';
 
   @override
   void initState() {
     super.initState();
-    _loadUsername();
-  }
-
-  Future<void> _loadUsername() async {
-    final name = await _authService.getUsername();
-    if (name != null) {
-      if (mounted) setState(() => _username = name);
-    }
   }
 
   Future<void> _handleLogout() async {
@@ -225,80 +217,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
         // 3. Chat List
         Expanded(
-<<<<<<< HEAD
-          child: ListView.builder(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-            itemCount: 8,
-            itemBuilder: (context, index) {
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child: GlassContainer(
-                  // Use defaults for Frosty Look: Blur 25, Opacity 0.12, Border 1.2
-                  borderRadius: 18,
-                  child: Material(
-                    color: Colors.transparent,
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(18),
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => ChatScreen(
-                              chatName: index == 0 ? "$_username (You)" : "User ${index + 1}",
-                              heroTag: 'chat_avatar_$index',
-                            ),
-                          ),
-                        );
-                      },
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Row(
-                          children: [
-                            // Avatar
-                            Hero(
-                              tag: 'chat_avatar_$index',
-                              child: CircleAvatar(
-                                radius: 25,
-                                backgroundColor: Colors.white.withOpacity(0.1),
-                                child: Icon(
-                                  Icons.person,
-                                  color: textColor.withOpacity(0.5),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 15),
-
-                            // Name & Msg
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    index == 0
-                                        ? "$_username (You)"
-                                        : "User ${index + 1}",
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 16,
-                                      color: textColor,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    index == 0
-                                        ? "Message to yourself"
-                                        : "Hey, are you free tonight?",
-                                    style: TextStyle(
-                                      color: textColor.withValues(alpha: 0.6),
-                                      fontSize: 14,
-                                    ),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ],
-                              ),
-                            ),
-=======
           child: StreamBuilder<QuerySnapshot>(
             stream: ChatService().getContactsStream(),
             builder: (context, snapshot) {
@@ -309,23 +227,32 @@ class _HomeScreenState extends State<HomeScreen> {
               if (snapshot.hasError) {
                 return const Center(child: Text('Error loading contacts'));
               }
->>>>>>> a5099f42e1434efabf0e330d46296743204a0487
 
               if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
                 return Center(
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(Icons.person_search, size: 64, color: textColor.withOpacity(0.3)),
+                      Icon(
+                        Icons.person_search,
+                        size: 64,
+                        color: textColor.withOpacity(0.3),
+                      ),
                       const SizedBox(height: 16),
                       Text(
                         'No contacts yet.',
-                        style: TextStyle(color: textColor.withOpacity(0.6), fontSize: 16),
+                        style: TextStyle(
+                          color: textColor.withOpacity(0.6),
+                          fontSize: 16,
+                        ),
                       ),
                       const SizedBox(height: 8),
                       Text(
                         'Tap the + button to search and add friends!',
-                        style: TextStyle(color: textColor.withOpacity(0.4), fontSize: 14),
+                        style: TextStyle(
+                          color: textColor.withOpacity(0.4),
+                          fontSize: 14,
+                        ),
                       ),
                     ],
                   ),
@@ -335,11 +262,14 @@ class _HomeScreenState extends State<HomeScreen> {
               final contacts = snapshot.data!.docs;
 
               return ListView.builder(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 10,
+                ),
                 itemCount: contacts.length,
                 itemBuilder: (context, index) {
-                  final contact = contacts[index].data() as Map<String, dynamic>;
-                  final isUnread = index == 0; // Keeping some mock UI state for demonstration
+                  final contact =
+                      contacts[index].data() as Map<String, dynamic>;
 
                   return Padding(
                     padding: const EdgeInsets.only(bottom: 12),
@@ -355,17 +285,10 @@ class _HomeScreenState extends State<HomeScreen> {
                               context,
                               MaterialPageRoute(
                                 builder: (_) => ChatScreen(
-                                  chatWithUser: contact['displayName'] ?? 'User',
+                                  chatWithUser:
+                                      contact['displayName'] ?? 'User',
                                   receiverId: contact['uid'],
                                 ),
-<<<<<<< HEAD
-                                const SizedBox(height: 6),
-                                if (index == 0)
-                                  Icon(
-                                    Icons.push_pin,
-                                    size: 16,
-                                    color: textColor.withValues(alpha: 0.5),
-=======
                               ),
                             );
                           }, // Go to Chat
@@ -376,11 +299,12 @@ class _HomeScreenState extends State<HomeScreen> {
                                 // Avatar
                                 CircleAvatar(
                                   radius: 25,
-                                  backgroundColor: Colors.white.withOpacity(0.1),
+                                  backgroundColor: Colors.white.withOpacity(
+                                    0.1,
+                                  ),
                                   child: Icon(
                                     Icons.person,
                                     color: textColor.withOpacity(0.5),
->>>>>>> a5099f42e1434efabf0e330d46296743204a0487
                                   ),
                                 ),
                                 const SizedBox(width: 15),
@@ -388,10 +312,12 @@ class _HomeScreenState extends State<HomeScreen> {
                                 // Name & Msg
                                 Expanded(
                                   child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
                                       Text(
-                                        contact['displayName'] ?? 'Unknown User',
+                                        contact['displayName'] ??
+                                            'Unknown User',
                                         style: TextStyle(
                                           fontWeight: FontWeight.bold,
                                           fontSize: 16,
@@ -419,7 +345,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                     Icon(
                                       Icons.chevron_right,
                                       color: textColor.withOpacity(0.3),
-                                    )
+                                    ),
                                   ],
                                 ),
                               ],
