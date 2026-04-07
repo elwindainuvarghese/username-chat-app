@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../services/chat_service.dart';
+import '../services/link_scanner_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 
@@ -125,13 +126,84 @@ class _ChatScreenState extends State<ChatScreen> {
                                 : surfaceColor,
                             borderRadius: BorderRadius.circular(20),
                           ),
-                          child: Text(
-                            msg['text'] ?? '',
-                            style: TextStyle(
-                              color: isMe
-                                  ? backgroundColor
-                                  : primaryTextColor,
-                            ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                msg['text'] ?? '',
+                                style: TextStyle(
+                                  color: isMe
+                                      ? backgroundColor
+                                      : primaryTextColor,
+                                ),
+                              ),
+                              ...LinkScannerService.extractUrls(msg['text'] ?? '').map((url) {
+                                return FutureBuilder<ScanResult>(
+                                  future: LinkScannerService.scanUrl(url),
+                                  builder: (context, snapshot) {
+                                    if (snapshot.connectionState == ConnectionState.waiting) {
+                                      return Padding(
+                                        padding: const EdgeInsets.only(top: 8.0),
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: const [
+                                            Icon(Icons.radar, size: 14, color: Colors.grey),
+                                            SizedBox(width: 4),
+                                            Text('Checking link...', style: TextStyle(fontSize: 11, color: Colors.grey)),
+                                          ],
+                                        ),
+                                      );
+                                    }
+                                    
+                                    if (snapshot.hasData) {
+                                      final result = snapshot.data!;
+                                      if (result.verdict == Verdict.dangerous) {
+                                        return Container(
+                                          margin: const EdgeInsets.only(top: 8),
+                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                                          color: Colors.red.withOpacity(0.12),
+                                          child: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              const Icon(Icons.warning, color: Colors.red, size: 14),
+                                              const SizedBox(width: 4),
+                                              Flexible(child: Text(result.userWarning, style: const TextStyle(color: Colors.red, fontSize: 12))),
+                                            ],
+                                          ),
+                                        );
+                                      } else if (result.verdict == Verdict.suspicious) {
+                                        return Container(
+                                          margin: const EdgeInsets.only(top: 8),
+                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                                          color: Colors.orange.withOpacity(0.12),
+                                          child: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              const Icon(Icons.warning, color: Colors.orange, size: 14),
+                                              const SizedBox(width: 4),
+                                              Flexible(child: Text(result.userWarning, style: const TextStyle(color: Colors.orange, fontSize: 12))),
+                                            ],
+                                          ),
+                                        );
+                                      } else if (result.verdict == Verdict.safe) {
+                                        return Padding(
+                                          padding: const EdgeInsets.only(top: 8.0),
+                                          child: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: const [
+                                              Icon(Icons.verified, color: Colors.green, size: 14),
+                                              SizedBox(width: 4),
+                                              Flexible(child: Text('Link looks safe', style: TextStyle(color: Colors.green, fontSize: 11))),
+                                            ],
+                                          ),
+                                        );
+                                      }
+                                    }
+                                    return const SizedBox.shrink();
+                                  },
+                                );
+                              }).toList(),
+                            ],
                           ),
                         ),
                       );
