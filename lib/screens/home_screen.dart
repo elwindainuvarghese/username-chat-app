@@ -218,7 +218,7 @@ class _HomeScreenState extends State<HomeScreen> {
         // 3. Chat List
         Expanded(
           child: StreamBuilder<QuerySnapshot>(
-            stream: ChatService().getContactsStream(),
+            stream: _chatService.getContactsStream(),
             builder: (context, snapshot) {
               if (snapshot.connectionState == ConnectionState.waiting) {
                 return const Center(child: CircularProgressIndicator());
@@ -280,7 +280,6 @@ class _HomeScreenState extends State<HomeScreen> {
                         child: InkWell(
                           borderRadius: BorderRadius.circular(18),
                           onTap: () {
-                            // Navigate to the Chat Screen with the selected user
                             Navigator.push(
                               context,
                               MaterialPageRoute(
@@ -291,12 +290,11 @@ class _HomeScreenState extends State<HomeScreen> {
                                 ),
                               ),
                             );
-                          }, // Go to Chat
+                          },
                           child: Padding(
                             padding: const EdgeInsets.all(16),
                             child: Row(
                               children: [
-                                // Avatar
                                 CircleAvatar(
                                   radius: 25,
                                   backgroundColor: Colors.white.withOpacity(
@@ -309,7 +307,6 @@ class _HomeScreenState extends State<HomeScreen> {
                                 ),
                                 const SizedBox(width: 15),
 
-                                // Name & Msg
                                 Expanded(
                                   child: Column(
                                     crossAxisAlignment:
@@ -326,7 +323,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                       ),
                                       const SizedBox(height: 4),
                                       Text(
-                                        contact['email'] ?? '',
+                                        (contact['email'] as String?) ?? '',
                                         style: TextStyle(
                                           color: textColor.withOpacity(0.6),
                                           fontSize: 14,
@@ -338,7 +335,6 @@ class _HomeScreenState extends State<HomeScreen> {
                                   ),
                                 ),
 
-                                // Time & Status
                                 Column(
                                   crossAxisAlignment: CrossAxisAlignment.end,
                                   children: [
