@@ -21,6 +21,7 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   int _selectedIndex = 0;
   final AuthService _authService = AuthService();
+  final ChatService _chatService = ChatService();
   String _username = 'User';
 
   @override
@@ -227,7 +228,7 @@ class _HomeScreenState extends State<HomeScreen> {
         // 3. Chat List
         Expanded(
           child: StreamBuilder<QuerySnapshot>(
-            stream: ChatService().getContactsStream(),
+            stream: _chatService.getContactsStream(),
             builder: (context, snapshot) {
               if (snapshot.connectionState == ConnectionState.waiting) {
                 return const Center(child: CircularProgressIndicator());
@@ -265,7 +266,6 @@ class _HomeScreenState extends State<HomeScreen> {
                 itemCount: contacts.length,
                 itemBuilder: (context, index) {
                   final contact = contacts[index].data() as Map<String, dynamic>;
-                  final isUnread = index == 0; // Keeping some mock UI state for demonstration
 
                   return Padding(
                     padding: const EdgeInsets.only(bottom: 12),
@@ -276,22 +276,20 @@ class _HomeScreenState extends State<HomeScreen> {
                         child: InkWell(
                           borderRadius: BorderRadius.circular(18),
                           onTap: () {
-                            // Navigate to the Chat Screen with the selected user
                             Navigator.push(
                               context,
                               MaterialPageRoute(
                                 builder: (_) => ChatScreen(
-                                  chatWithUser: contact['displayName'] ?? 'User',
-                                  receiverId: contact['uid'],
+                                  chatWithUser: (contact['displayName'] as String?) ?? 'User',
+                                  receiverId: (contact['uid'] as String?) ?? '',
                                 ),
                               ),
                             );
-                          }, // Go to Chat
+                          },
                           child: Padding(
                             padding: const EdgeInsets.all(16),
                             child: Row(
                               children: [
-                                // Avatar
                                 CircleAvatar(
                                   radius: 25,
                                   backgroundColor: Colors.white.withOpacity(0.1),
@@ -302,13 +300,12 @@ class _HomeScreenState extends State<HomeScreen> {
                                 ),
                                 const SizedBox(width: 15),
 
-                                // Name & Msg
                                 Expanded(
                                   child: Column(
                                     crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
                                       Text(
-                                        contact['displayName'] ?? 'Unknown User',
+                                        (contact['displayName'] as String?) ?? 'Unknown User',
                                         style: TextStyle(
                                           fontWeight: FontWeight.bold,
                                           fontSize: 16,
@@ -317,7 +314,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                       ),
                                       const SizedBox(height: 4),
                                       Text(
-                                        contact['email'] ?? '',
+                                        (contact['email'] as String?) ?? '',
                                         style: TextStyle(
                                           color: textColor.withOpacity(0.6),
                                           fontSize: 14,
@@ -329,7 +326,6 @@ class _HomeScreenState extends State<HomeScreen> {
                                   ),
                                 ),
 
-                                // Time & Status
                                 Column(
                                   crossAxisAlignment: CrossAxisAlignment.end,
                                   children: [
