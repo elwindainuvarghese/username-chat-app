@@ -21,20 +21,10 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   int _selectedIndex = 0;
   final AuthService _authService = AuthService();
-  final ChatService _chatService = ChatService();
-  String _username = 'User';
 
   @override
   void initState() {
     super.initState();
-    _loadUsername();
-  }
-
-  Future<void> _loadUsername() async {
-    final name = await _authService.getUsername();
-    if (name != null) {
-      if (mounted) setState(() => _username = name);
-    }
   }
 
   Future<void> _handleLogout() async {
@@ -243,16 +233,26 @@ class _HomeScreenState extends State<HomeScreen> {
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(Icons.person_search, size: 64, color: textColor.withOpacity(0.3)),
+                      Icon(
+                        Icons.person_search,
+                        size: 64,
+                        color: textColor.withOpacity(0.3),
+                      ),
                       const SizedBox(height: 16),
                       Text(
                         'No contacts yet.',
-                        style: TextStyle(color: textColor.withOpacity(0.6), fontSize: 16),
+                        style: TextStyle(
+                          color: textColor.withOpacity(0.6),
+                          fontSize: 16,
+                        ),
                       ),
                       const SizedBox(height: 8),
                       Text(
                         'Tap the + button to search and add friends!',
-                        style: TextStyle(color: textColor.withOpacity(0.4), fontSize: 14),
+                        style: TextStyle(
+                          color: textColor.withOpacity(0.4),
+                          fontSize: 14,
+                        ),
                       ),
                     ],
                   ),
@@ -262,10 +262,14 @@ class _HomeScreenState extends State<HomeScreen> {
               final contacts = snapshot.data!.docs;
 
               return ListView.builder(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 10,
+                ),
                 itemCount: contacts.length,
                 itemBuilder: (context, index) {
-                  final contact = contacts[index].data() as Map<String, dynamic>;
+                  final contact =
+                      contacts[index].data() as Map<String, dynamic>;
 
                   return Padding(
                     padding: const EdgeInsets.only(bottom: 12),
@@ -280,8 +284,9 @@ class _HomeScreenState extends State<HomeScreen> {
                               context,
                               MaterialPageRoute(
                                 builder: (_) => ChatScreen(
-                                  chatWithUser: (contact['displayName'] as String?) ?? 'User',
-                                  receiverId: (contact['uid'] as String?) ?? '',
+                                  chatWithUser:
+                                      contact['displayName'] ?? 'User',
+                                  receiverId: contact['uid'],
                                 ),
                               ),
                             );
@@ -292,7 +297,9 @@ class _HomeScreenState extends State<HomeScreen> {
                               children: [
                                 CircleAvatar(
                                   radius: 25,
-                                  backgroundColor: Colors.white.withOpacity(0.1),
+                                  backgroundColor: Colors.white.withOpacity(
+                                    0.1,
+                                  ),
                                   child: Icon(
                                     Icons.person,
                                     color: textColor.withOpacity(0.5),
@@ -302,10 +309,12 @@ class _HomeScreenState extends State<HomeScreen> {
 
                                 Expanded(
                                   child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
                                       Text(
-                                        (contact['displayName'] as String?) ?? 'Unknown User',
+                                        contact['displayName'] ??
+                                            'Unknown User',
                                         style: TextStyle(
                                           fontWeight: FontWeight.bold,
                                           fontSize: 16,
@@ -332,7 +341,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                     Icon(
                                       Icons.chevron_right,
                                       color: textColor.withOpacity(0.3),
-                                    )
+                                    ),
                                   ],
                                 ),
                               ],

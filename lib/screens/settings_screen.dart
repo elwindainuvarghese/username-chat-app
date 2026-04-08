@@ -294,7 +294,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     BuildContext context,
   ) {
     final textColor = Theme.of(context).colorScheme.onSurface;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 12.0),

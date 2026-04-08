@@ -59,7 +59,26 @@ class _LoginScreenState extends State<LoginScreen>
         throw 'Please enter a username';
       }
 
-      await _authService.registerNewUser(username: username);
+      // Generate anonymous credentials to work with the updated AuthService
+      final safeUsername = username.toLowerCase().replaceAll(
+        RegExp(r'[^a-z0-9]'),
+        '',
+      );
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      final email = '${safeUsername}_$timestamp@bitchat.anon';
+      final password = 'AnonBitChatPassword\$123!';
+
+      // Use the updated signup method
+      final result = await _authService.signup(
+        email,
+        username,
+        password,
+        password,
+      );
+
+      if (result['success'] == false) {
+        throw result['message'];
+      }
 
       if (mounted) {
         // Smooth transition to Home
@@ -88,7 +107,6 @@ class _LoginScreenState extends State<LoginScreen>
 
   @override
   Widget build(BuildContext context) {
-    final size = MediaQuery.of(context).size;
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(

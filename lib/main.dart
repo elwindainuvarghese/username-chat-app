@@ -7,7 +7,6 @@ import 'screens/auth/login_screen.dart';
 import 'screens/auth/signup_screen.dart';
 import 'screens/auth/recovery_phrase_screen.dart';
 import 'screens/auth/recover_account_screen.dart';
-import 'services/auth_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 // Simple Theme Notifier for global state
@@ -24,9 +23,7 @@ final themeNotifier = ThemeNotifier(ThemeMode.dark);
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   runApp(const MyApp());
 }
 
@@ -38,13 +35,11 @@ class MyApp extends StatefulWidget {
 }
 
 class _MyAppState extends State<MyApp> {
-  late final AuthService _authService;
   bool? _isLoggedIn;
 
   @override
   void initState() {
     super.initState();
-    _authService = AuthService();
     final auth = FirebaseAuth.instanceFor(app: Firebase.app());
     _isLoggedIn = auth.currentUser != null;
     auth.authStateChanges().listen((User? user) {
@@ -148,9 +143,7 @@ class _MyAppState extends State<MyApp> {
                   ),
                 );
               default:
-                return MaterialPageRoute(
-                  builder: (_) => const WelcomeScreen(),
-                );
+                return MaterialPageRoute(builder: (_) => const WelcomeScreen());
             }
           },
           home: _isLoggedIn == null
