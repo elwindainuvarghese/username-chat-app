@@ -6,7 +6,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../models/link_safety_result.dart';
 import '../services/chat_service.dart';
+import '../services/link_safety_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 
@@ -28,6 +30,7 @@ class _ChatScreenState extends State<ChatScreen> {
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   final ChatService _chatService = ChatService();
+  final LinkSafetyService _linkSafetyService = LinkSafetyService.instance;
   final ImagePicker _picker = ImagePicker();
 
   final String _currentUid =
@@ -305,6 +308,53 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
+  Future<void> _openMessageUrl(
+    BuildContext context,
+    String url,
+    LinkSafetyResult? safetyResult,
+  ) async {
+    final Uri uri = Uri.parse(url);
+
+    if (safetyResult == null || safetyResult.isSafe) {
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      }
+      return;
+    }
+
+    if (!context.mounted) return;
+
+    final bool? shouldOpen = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: Text(
+            safetyResult.isUnsafe ? 'Unsafe link detected' : 'Link check unavailable',
+          ),
+          content: Text(
+            safetyResult.isUnsafe
+                ? 'This link was flagged as ${safetyResult.threatTypesLabel}. Opening it may expose your device or data to risk. Do you still want to open it?'
+                : 'The app could not verify this link. Opening it may still be unsafe. Do you want to continue?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: const Text('Open anyway'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (shouldOpen == true && await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -366,6 +416,7 @@ class _ChatScreenState extends State<ChatScreen> {
                     itemBuilder: (context, index) {
                       final msg =
                           messages[index].data() as Map<String, dynamic>;
+                      final String messageText = (msg['text'] ?? '').toString();
 
                       final isMe = msg['senderId'] == _currentUid;
 
@@ -400,14 +451,22 @@ class _ChatScreenState extends State<ChatScreen> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                if (msg['text'] != null &&
-                                    msg['text'].toString().isNotEmpty)
+                                if (messageText.isNotEmpty)
                                   Padding(
                                     padding: const EdgeInsets.only(bottom: 8.0),
-                                    child: Text(
-                                      msg['text'] ?? '',
-                                      style: TextStyle(color: textColor),
+                                    child: _MessageTextWithLinks(
+                                      messageText: messageText,
+                                      textColor: textColor,
+                                      isDark: isDark,
+                                      linkSafetyService: _linkSafetyService,
+                                      onOpenUrl: _openMessageUrl,
                                     ),
+                                  ),
+                                if (messageText.isNotEmpty)
+                                  _MessageLinkSafetyIndicators(
+                                    messageText: messageText,
+                                    isDark: isDark,
+                                    linkSafetyService: _linkSafetyService,
                                   ),
                                 if (msg['attachmentUrl'] != null)
                                   GestureDetector(
@@ -538,6 +597,268 @@ class _ChatScreenState extends State<ChatScreen> {
                 ],
               ),
             ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _MessageLinkSafetyIndicators extends StatelessWidget {
+  final String messageText;
+  final bool isDark;
+  final LinkSafetyService linkSafetyService;
+
+  const _MessageLinkSafetyIndicators({
+    required this.messageText,
+    required this.isDark,
+    required this.linkSafetyService,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<List<LinkSafetyResult>>(
+      // URL checks run in the background and are cached by the service.
+      future: linkSafetyService.checkMessageLinks(messageText),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) {
+          return const SizedBox.shrink();
+        }
+
+        final List<LinkSafetyResult> results = snapshot.data!;
+        if (results.isEmpty) {
+          return const SizedBox.shrink();
+        }
+
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: Wrap(
+            spacing: 8,
+            runSpacing: 6,
+            children: results
+                .map((result) => _SafetyBadge(result: result, isDark: isDark))
+                .toList(growable: false),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _MessageTextWithLinks extends StatelessWidget {
+  final String messageText;
+  final Color textColor;
+  final bool isDark;
+  final LinkSafetyService linkSafetyService;
+  final Future<void> Function(
+    BuildContext context,
+    String url,
+    LinkSafetyResult? safetyResult,
+  ) onOpenUrl;
+
+  const _MessageTextWithLinks({
+    required this.messageText,
+    required this.textColor,
+    required this.isDark,
+    required this.linkSafetyService,
+    required this.onOpenUrl,
+  });
+
+  static final RegExp _urlRegex = RegExp(
+    r"((https?:\/\/)|(www\.))[\w\-._~:\/?#[\]@!$&'()*+,;=%]+",
+    caseSensitive: false,
+  );
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<List<LinkSafetyResult>>(
+      future: linkSafetyService.checkMessageLinks(messageText),
+      builder: (context, snapshot) {
+        final Map<String, LinkSafetyResult> safetyByUrl = <String, LinkSafetyResult>{};
+        final List<LinkSafetyResult> results = snapshot.data ?? const <LinkSafetyResult>[];
+        for (final result in results) {
+          safetyByUrl[result.url] = result;
+        }
+
+        final List<InlineSpan> spans = <InlineSpan>[];
+        int currentIndex = 0;
+
+        for (final RegExpMatch match in _urlRegex.allMatches(messageText)) {
+          final int start = match.start;
+          final int end = match.end;
+          final String rawUrl = messageText.substring(start, end);
+          final List<String> normalizedCandidates = linkSafetyService.extractUrls(rawUrl);
+          final String normalizedUrl = normalizedCandidates.isNotEmpty
+              ? normalizedCandidates.first
+              : _normalizeUrlForDisplay(rawUrl);
+
+          if (start > currentIndex) {
+            spans.add(
+              TextSpan(
+                text: messageText.substring(currentIndex, start),
+                style: TextStyle(color: textColor),
+              ),
+            );
+          }
+
+          final LinkSafetyResult? safetyResult = safetyByUrl[normalizedUrl];
+          spans.add(
+            WidgetSpan(
+              alignment: PlaceholderAlignment.baseline,
+              baseline: TextBaseline.alphabetic,
+              child: _ClickableMessageLink(
+                displayText: rawUrl,
+                url: normalizedUrl,
+                textColor: textColor,
+                safetyResult: safetyResult,
+                onTap: () => onOpenUrl(context, normalizedUrl, safetyResult),
+              ),
+            ),
+          );
+
+          currentIndex = end;
+        }
+
+        if (currentIndex < messageText.length) {
+          spans.add(
+            TextSpan(
+              text: messageText.substring(currentIndex),
+              style: TextStyle(color: textColor),
+            ),
+          );
+        }
+
+        if (spans.isEmpty) {
+          return Text(messageText, style: TextStyle(color: textColor));
+        }
+
+        return RichText(
+          text: TextSpan(
+            style: TextStyle(color: textColor, height: 1.35),
+            children: spans,
+          ),
+        );
+      },
+    );
+  }
+
+  String _normalizeUrlForDisplay(String input) {
+    String value = input.trim();
+    value = value.replaceAll(RegExp(r'[),.;!?]+$'), '');
+    if (value.startsWith('www.')) {
+      value = 'https://$value';
+    }
+    return value;
+  }
+}
+
+class _ClickableMessageLink extends StatelessWidget {
+  final String displayText;
+  final String url;
+  final Color textColor;
+  final LinkSafetyResult? safetyResult;
+  final VoidCallback onTap;
+
+  const _ClickableMessageLink({
+    required this.displayText,
+    required this.url,
+    required this.textColor,
+    required this.safetyResult,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final Color linkColor = safetyResult == null
+        ? Colors.blueAccent
+        : safetyResult!.isUnsafe
+            ? Colors.redAccent
+            : Colors.blueAccent;
+
+    return InkWell(
+      onTap: onTap,
+      child: Text(
+        displayText,
+        style: TextStyle(
+          color: linkColor,
+          decoration: TextDecoration.underline,
+          decorationColor: linkColor,
+        ),
+      ),
+    );
+  }
+}
+
+class _SafetyBadge extends StatelessWidget {
+  final LinkSafetyResult result;
+  final bool isDark;
+
+  const _SafetyBadge({required this.result, required this.isDark});
+
+  @override
+  Widget build(BuildContext context) {
+    Color textColor;
+    Color backgroundColor;
+    IconData icon;
+    String label;
+
+    if (result.status == LinkSafetyStatus.safe) {
+      textColor = Colors.green.shade800;
+      backgroundColor = Colors.green.shade100;
+      icon = Icons.verified;
+      label = 'Safe Link';
+    } else if (result.status == LinkSafetyStatus.unsafe) {
+      textColor = Colors.red.shade800;
+      backgroundColor = Colors.red.shade100;
+      icon = Icons.warning_rounded;
+      label = 'Scam/Unsafe Link';
+    } else {
+      textColor = isDark ? Colors.white70 : Colors.black54;
+      backgroundColor = isDark ? Colors.white12 : Colors.black12;
+      icon = Icons.help_outline;
+      label = 'Link status unknown';
+    }
+
+    return Tooltip(
+      message: result.isUnsafe
+          ? '${result.threatTypesLabel}\n${result.url}'
+          : result.url,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: backgroundColor,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(icon, size: 14, color: textColor),
+                const SizedBox(width: 6),
+                Text(
+                  label,
+                  style: TextStyle(
+                    color: textColor,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+            if (result.isUnsafe && result.threatTypes.isNotEmpty) ...[
+              const SizedBox(height: 4),
+              Text(
+                result.threatTypesLabel,
+                style: TextStyle(
+                  color: textColor.withValues(alpha: 0.9),
+                  fontSize: 11,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
           ],
         ),
       ),

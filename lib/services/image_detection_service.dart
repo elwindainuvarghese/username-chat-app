@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
-import '../core/secrets.dart';
+import '../config/api_keys.dart';
 
 class ImageDetectionService {
   final String _apiUrl = 'https://api.sightengine.com/1.0/check.json';
@@ -10,8 +10,8 @@ class ImageDetectionService {
   final String _videoApiUrl =
       'https://api.sightengine.com/1.0/video/check-sync.json';
 
-  final String _apiUser = Secrets.apiUser;
-  final String _apiSecret = Secrets.apiSecret;
+  final String _apiUser = ApiKeys.apiUser;
+  final String _apiSecret = ApiKeys.apiSecret;
 
   // Parameter string requested by user
   final String _models =
