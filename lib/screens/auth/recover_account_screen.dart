@@ -32,17 +32,19 @@ class _RecoverAccountScreenState extends State<RecoverAccountScreen> {
         _recoveryPhraseController.text = clipboardData!.text!;
         setState(() => _hasPastedPhrase = true);
         
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('Recovery phrase pasted from clipboard'),
-            backgroundColor: Colors.green,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          ),
-        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Text('Recovery phrase pasted from clipboard'),
+              backgroundColor: Colors.green,
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+          );
+        }
       }
     } catch (e) {
-      _showErrorSnackBar('Unable to paste from clipboard');
+      if (mounted) _showErrorSnackBar('Unable to paste from clipboard');
     }
   }
 
@@ -123,7 +125,7 @@ class _RecoverAccountScreenState extends State<RecoverAccountScreen> {
                       shape: BoxShape.circle,
                       gradient: RadialGradient(
                         colors: [
-                          const Color(0xFF7F00FF).withOpacity(0.5),
+                          const Color(0xFF7F00FF).withValues(alpha: 0.5),
                           Colors.transparent,
                         ],
                       ),
@@ -140,7 +142,7 @@ class _RecoverAccountScreenState extends State<RecoverAccountScreen> {
                       shape: BoxShape.circle,
                       gradient: RadialGradient(
                         colors: [
-                          Colors.blueAccent.withOpacity(0.4),
+                          Colors.blueAccent.withValues(alpha: 0.4),
                           Colors.transparent,
                         ],
                       ),
@@ -165,8 +167,8 @@ class _RecoverAccountScreenState extends State<RecoverAccountScreen> {
                         ),
                         style: IconButton.styleFrom(
                           backgroundColor: isDark 
-                              ? Colors.white.withOpacity(0.1)
-                              : Colors.black.withOpacity(0.05),
+                              ? Colors.white.withValues(alpha: 0.1)
+                              : Colors.black.withValues(alpha: 0.05),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12),
                           ),
@@ -191,7 +193,7 @@ class _RecoverAccountScreenState extends State<RecoverAccountScreen> {
                         'Enter your 16-word recovery phrase to restore your account',
                         style: TextStyle(
                           fontSize: 16,
-                          color: textColor.withOpacity(0.7),
+                          color: textColor.withValues(alpha: 0.7),
                         ),
                       ),
 
@@ -225,7 +227,7 @@ class _RecoverAccountScreenState extends State<RecoverAccountScreen> {
                                   'Enter each word of your recovery phrase separated by spaces. Make sure they are in the correct order.',
                                   style: TextStyle(
                                     fontSize: 14,
-                                    color: textColor.withOpacity(0.7),
+                                    color: textColor.withValues(alpha: 0.7),
                                   ),
                                 ),
 
@@ -242,13 +244,13 @@ class _RecoverAccountScreenState extends State<RecoverAccountScreen> {
                                     decoration: InputDecoration(
                                       hintText: 'word1 word2 word3 word4 word5 word6 word7 word8 word9 word10 word11 word12 word13 word14 word15 word16',
                                       hintStyle: TextStyle(
-                                        color: textColor.withOpacity(0.5),
+                                        color: textColor.withValues(alpha: 0.5),
                                         fontSize: 14,
                                       ),
                                       filled: true,
                                       fillColor: isDark
-                                          ? Colors.white.withOpacity(0.05)
-                                          : Colors.black.withOpacity(0.03),
+                                          ? Colors.white.withValues(alpha: 0.05)
+                                          : Colors.black.withValues(alpha: 0.03),
                                       border: OutlineInputBorder(
                                         borderRadius: BorderRadius.circular(16),
                                         borderSide: BorderSide.none,
@@ -294,7 +296,7 @@ class _RecoverAccountScreenState extends State<RecoverAccountScreen> {
                                       padding: const EdgeInsets.symmetric(vertical: 16),
                                       foregroundColor: textColor,
                                       side: BorderSide(
-                                        color: textColor.withOpacity(0.3),
+                                        color: textColor.withValues(alpha: 0.3),
                                         width: 1.5,
                                       ),
                                       shape: RoundedRectangleBorder(
@@ -349,7 +351,7 @@ class _RecoverAccountScreenState extends State<RecoverAccountScreen> {
                                   children: [
                                     Icon(
                                       Icons.security,
-                                      color: textColor.withOpacity(0.6),
+                                      color: textColor.withValues(alpha: 0.6),
                                       size: 16,
                                     ),
                                     const SizedBox(width: 8),
@@ -358,7 +360,7 @@ class _RecoverAccountScreenState extends State<RecoverAccountScreen> {
                                         'Your recovery phrase is never sent to our servers. All validation happens locally on your device.',
                                         style: TextStyle(
                                           fontSize: 12,
-                                          color: textColor.withOpacity(0.6),
+                                          color: textColor.withValues(alpha: 0.6),
                                         ),
                                       ),
                                     ),

@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_storage/firebase_storage.dart';
+import '../models/connection.dart';
 
 class ChatService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instanceFor(
@@ -18,17 +19,83 @@ class ChatService {
     return userIds.join('_');
   }
 
-  /// Search for a user by email
+  /// Forward a message to another user
+  Future<void> forwardMessage(
+    String receiverId,
+    Map<String, dynamic> originalMessageData,
+  ) async {
+    final currentUser = _auth.currentUser;
+    if (currentUser == null) return;
+
+    final chatRoomId = getChatRoomId(currentUser.uid, receiverId);
+
+    int currentForwardCount =
+        (originalMessageData['forwardCount'] as num?)?.toInt() ?? 0;
+
+
+    String lastMessageText = (originalMessageData['text'] ?? '').toString();
+    if (originalMessageData['attachmentUrl'] != null) {
+      lastMessageText = 'Forwarded attachment';
+    } else if (lastMessageText.isEmpty) {
+      lastMessageText = 'Forwarded message';
+    }
+
+    // 1. Create or update the Chat Room metadata
+    await _firestore.collection('chatRooms').doc(chatRoomId).set({
+      'participants': [currentUser.uid, receiverId],
+      'lastMessage': lastMessageText,
+      'lastMessageTime': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+
+    // 2. Add message to messages sub-collection
+    Map<String, dynamic> newMessage = {
+      'senderId': currentUser.uid,
+      'text': originalMessageData['text'] ?? '',
+      'timestamp': FieldValue.serverTimestamp(),
+      'forwardCount': currentForwardCount + 1,
+      'isForwarded': true,
+    };
+
+    if (originalMessageData['attachmentUrl'] != null) {
+      newMessage['attachmentUrl'] = originalMessageData['attachmentUrl'];
+      newMessage['attachmentName'] = originalMessageData['attachmentName'];
+      newMessage['attachmentType'] = originalMessageData['attachmentType'];
+    }
+
+    await _firestore
+        .collection('chatRooms')
+        .doc(chatRoomId)
+        .collection('messages')
+        .add(newMessage);
+  }
+
+  /// Search for a user by email (case-insensitive & fast)
   Future<Map<String, dynamic>?> searchUserByEmail(String email) async {
     try {
-      final querySnapshot = await _firestore
-          .collection('users')
-          .where('email', isEqualTo: email.trim())
-          .limit(1)
-          .get();
+      final normalizedEmail = email.trim().toLowerCase();
 
-      if (querySnapshot.docs.isNotEmpty) {
-        return querySnapshot.docs.first.data();
+      // Run both queries concurrently to halve the response time
+      final results = await Future.wait([
+        _firestore
+            .collection('users')
+            .where('email', isEqualTo: normalizedEmail)
+            .limit(1)
+            .get(),
+        _firestore
+            .collection('users')
+            .where('email', isEqualTo: email.trim())
+            .limit(1)
+            .get(),
+      ]);
+
+      final lowerQuery = results[0];
+      final exactQuery = results[1];
+
+      if (lowerQuery.docs.isNotEmpty) {
+        return lowerQuery.docs.first.data();
+      }
+      if (exactQuery.docs.isNotEmpty) {
+        return exactQuery.docs.first.data();
       }
       return null;
     } catch (e) {
@@ -38,6 +105,7 @@ class ChatService {
   }
 
   /// Add a user to the current user's contacts sub-collection
+  /// and also create a connections document for mutual access.
   Future<bool> addContact(
     String contactUid,
     String contactEmail,
@@ -50,17 +118,38 @@ class ChatService {
     if (currentUser.uid == contactUid) return false;
 
     try {
-      await _firestore
-          .collection('users')
-          .doc(currentUser.uid)
-          .collection('contacts')
-          .doc(contactUid)
-          .set({
-            'uid': contactUid,
-            'email': contactEmail,
-            'displayName': contactName,
-            'addedAt': FieldValue.serverTimestamp(),
-          });
+      final batch = _firestore.batch();
+
+      // Add to my contacts
+      batch.set(
+        _firestore
+            .collection('users')
+            .doc(currentUser.uid)
+            .collection('contacts')
+            .doc(contactUid),
+        {
+          'uid': contactUid,
+          'email': contactEmail,
+          'displayName': contactName,
+          'addedAt': FieldValue.serverTimestamp(),
+        },
+      );
+
+      // Create connection document so chat screen unlocks
+      final connId = Connection.generateId(currentUser.uid, contactUid);
+      final sorted = [currentUser.uid, contactUid]..sort();
+      batch.set(
+        _firestore.collection('connections').doc(connId),
+        {
+          'user1Id': sorted[0],
+          'user2Id': sorted[1],
+          'createdAt': FieldValue.serverTimestamp(),
+          'active': true,
+        },
+        SetOptions(merge: true),
+      );
+
+      await batch.commit();
       return true;
     } catch (e) {
       print("Error adding contact: $e");
@@ -68,7 +157,7 @@ class ChatService {
     }
   }
 
-  /// Stream of user's contacts
+  /// Stream of user's contacts (no ordering to avoid excluding docs missing addedAt)
   Stream<QuerySnapshot> getContactsStream() {
     final currentUser = _auth.currentUser;
     if (currentUser == null) {
@@ -78,7 +167,6 @@ class ChatService {
         .collection('users')
         .doc(currentUser.uid)
         .collection('contacts')
-        .orderBy('addedAt', descending: true)
         .snapshots();
   }
 
@@ -118,27 +206,32 @@ class ChatService {
     String receiverName,
     Uint8List fileBytes,
     String attachmentName,
-    String attachmentType,
-  ) async {
+    String attachmentType, {
+    String messageText = '',
+  }) async {
     final currentUser = _auth.currentUser;
     if (currentUser == null) return;
 
     final chatRoomId = getChatRoomId(currentUser.uid, receiverId);
-    final storage = FirebaseStorage.instanceFor(app: Firebase.app());
-    final storageRef = storage.ref().child(
+    
+    // Use the default instance for better compatibility across platforms
+    final storageRef = FirebaseStorage.instance.ref().child(
       'chatRooms/$chatRoomId/attachments/${DateTime.now().millisecondsSinceEpoch}_$attachmentName',
     );
 
     final contentType = _getContentType(attachmentName, attachmentType);
     final metadata = SettableMetadata(contentType: contentType);
 
+    // Upload with standard await
     final uploadTask = storageRef.putData(fileBytes, metadata);
-    final snapshot = await uploadTask.whenComplete(() {});
+    final snapshot = await uploadTask;
     final downloadUrl = await snapshot.ref.getDownloadURL();
 
-    final lastMessageText = attachmentType == 'image'
-        ? 'Sent an image'
-        : 'Sent a file: $attachmentName';
+    final lastMessageText = messageText.isNotEmpty 
+        ? messageText 
+        : (attachmentType == 'image'
+            ? 'Sent an image'
+            : 'Sent a file: $attachmentName');
 
     await _firestore.collection('chatRooms').doc(chatRoomId).set({
       'participants': [currentUser.uid, receiverId],
@@ -152,7 +245,7 @@ class ChatService {
         .collection('messages')
         .add({
           'senderId': currentUser.uid,
-          'text': '',
+          'text': messageText,
           'timestamp': FieldValue.serverTimestamp(),
           'attachmentUrl': downloadUrl,
           'attachmentName': attachmentName,

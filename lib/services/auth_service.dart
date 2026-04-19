@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 
 class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instanceFor(app: Firebase.app());
@@ -119,6 +120,41 @@ class AuthService {
   Future<void> logout() async {
     await _auth.signOut();
     await storage.delete(key: _usernameStorageKey);
+  }
+
+  Future<String?> getProfilePictureUrl(String uid) async {
+    try {
+      final doc = await _firestore.collection('users').doc(uid).get();
+      if (doc.exists) {
+        return doc.data()?['profilePicUrl'] as String?;
+      }
+    } catch (e) {
+      // ignore
+    }
+    return null;
+  }
+
+  Future<String?> uploadProfilePicture(String uid, dynamic fileBytes) async {
+    try {
+      // We use import 'package:firebase_storage/firebase_storage.dart';
+      // So we must ensure it's imported at the top.
+      final storageRef = FirebaseStorage.instance.ref().child('profilePics/$uid.jpg');
+      final metadata = SettableMetadata(contentType: 'image/jpeg');
+      
+      final uploadTask = storageRef.putData(fileBytes, metadata);
+      final snapshot = await uploadTask;
+      final downloadUrl = await snapshot.ref.getDownloadURL();
+
+      // Update Firestore
+      await _firestore.collection('users').doc(uid).update({
+        'profilePicUrl': downloadUrl,
+      });
+
+      return downloadUrl;
+    } catch (e) {
+      print('Error uploading profile pic: $e');
+      return null;
+    }
   }
 
   // ============== MOCK RECOVERY METHODS FOR EXISTING UI ==============

@@ -33,8 +33,6 @@ class _RecoveryPhraseScreenState extends State<RecoveryPhraseScreen> {
     setState(() {
       _recoveryPhrase = _authService.generateRecoveryPhrase();
     });
-    print("UI Recovery phrase: $_recoveryPhrase"); // Debug log
-    print("Phrase length: ${_recoveryPhrase.length}"); // Debug log
   }
 
   void _copyRecoveryPhrase() {
@@ -113,7 +111,7 @@ class _RecoveryPhraseScreenState extends State<RecoveryPhraseScreen> {
                       shape: BoxShape.circle,
                       gradient: RadialGradient(
                         colors: [
-                          const Color(0xFF7F00FF).withOpacity(0.5),
+                          const Color(0xFF7F00FF).withValues(alpha: 0.5),
                           Colors.transparent,
                         ],
                       ),
@@ -130,7 +128,7 @@ class _RecoveryPhraseScreenState extends State<RecoveryPhraseScreen> {
                       shape: BoxShape.circle,
                       gradient: RadialGradient(
                         colors: [
-                          Colors.blueAccent.withOpacity(0.4),
+                          Colors.blueAccent.withValues(alpha: 0.4),
                           Colors.transparent,
                         ],
                       ),
@@ -162,7 +160,7 @@ class _RecoveryPhraseScreenState extends State<RecoveryPhraseScreen> {
                         'These 16 words are the keys to your account. Store them safely!',
                         style: TextStyle(
                           fontSize: 14,
-                          color: textColor.withOpacity(0.7),
+                          color: textColor.withValues(alpha: 0.7),
                         ),
                       ),
 
@@ -172,7 +170,7 @@ class _RecoveryPhraseScreenState extends State<RecoveryPhraseScreen> {
                           margin: const EdgeInsets.only(top: 8),
                           padding: const EdgeInsets.all(8),
                           decoration: BoxDecoration(
-                            color: Colors.orange.withOpacity(0.2),
+                            color: Colors.orange.withValues(alpha: 0.2),
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: Text(
@@ -218,7 +216,7 @@ class _RecoveryPhraseScreenState extends State<RecoveryPhraseScreen> {
                                     'Write these words down and store them safely. This is the only way to recover your account.',
                                     style: TextStyle(
                                       fontSize: 12,
-                                      color: textColor.withOpacity(0.8),
+                                      color: textColor.withValues(alpha: 0.8),
                                     ),
                                   ),
                                 ],
@@ -269,7 +267,7 @@ class _RecoveryPhraseScreenState extends State<RecoveryPhraseScreen> {
                                             '${index + 1}',
                                             style: TextStyle(
                                               fontSize: 9,
-                                              color: textColor.withOpacity(0.6),
+                                              color: textColor.withValues(alpha: 0.6),
                                               fontWeight: FontWeight.w500,
                                             ),
                                           ),
@@ -318,7 +316,7 @@ class _RecoveryPhraseScreenState extends State<RecoveryPhraseScreen> {
                                     side: BorderSide(
                                       color: _isPhraseCopied 
                                           ? Colors.green 
-                                          : textColor.withOpacity(0.3),
+                                          : textColor.withValues(alpha: 0.3),
                                       width: 1.5,
                                     ),
                                     shape: RoundedRectangleBorder(
@@ -359,7 +357,7 @@ class _RecoveryPhraseScreenState extends State<RecoveryPhraseScreen> {
                                 'I have safely stored my recovery phrase and understand that I will need it to recover my account.',
                                 style: TextStyle(
                                   fontSize: 12,
-                                  color: textColor.withOpacity(0.8),
+                                  color: textColor.withValues(alpha: 0.8),
                                 ),
                               ),
                             ),
@@ -377,10 +375,10 @@ class _RecoveryPhraseScreenState extends State<RecoveryPhraseScreen> {
                           style: ElevatedButton.styleFrom(
                             backgroundColor: _isPhraseConfirmed 
                                 ? (isDark ? Colors.white : Colors.black)
-                                : textColor.withOpacity(0.3),
+                                : textColor.withValues(alpha: 0.3),
                             foregroundColor: _isPhraseConfirmed
                                 ? (isDark ? Colors.black : Colors.white)
-                                : textColor.withOpacity(0.7),
+                                : textColor.withValues(alpha: 0.7),
                             padding: const EdgeInsets.symmetric(vertical: 16),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(16),

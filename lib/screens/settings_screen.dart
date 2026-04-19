@@ -1,4 +1,8 @@
 import 'package:flutter/material.dart';
+import 'dart:typed_data';
+import 'package:image_picker/image_picker.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_core/firebase_core.dart';
 import '../widgets/glass_container.dart';
 import '../services/auth_service.dart';
 // For themes
@@ -13,11 +17,47 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   final AuthService _authService = AuthService();
   String _username = 'User';
+  String? _profilePicUrl;
+  bool _isUploading = false;
 
   @override
   void initState() {
     super.initState();
     _loadUsername();
+    _loadProfilePic();
+  }
+
+  Future<void> _loadProfilePic() async {
+    final uid = FirebaseAuth.instanceFor(app: Firebase.app()).currentUser?.uid;
+    if (uid != null) {
+      final url = await _authService.getProfilePictureUrl(uid);
+      if (mounted) setState(() => _profilePicUrl = url);
+    }
+  }
+
+  Future<void> _pickAndUploadProfilePic() async {
+    final ImagePicker picker = ImagePicker();
+    final XFile? image = await picker.pickImage(source: ImageSource.gallery, imageQuality: 50);
+    
+    if (image != null) {
+      setState(() => _isUploading = true);
+      
+      final uid = FirebaseAuth.instanceFor(app: Firebase.app()).currentUser?.uid;
+      if (uid != null) {
+        final bytes = await image.readAsBytes();
+        final url = await _authService.uploadProfilePicture(uid, bytes);
+        if (url != null && mounted) {
+            setState(() {
+                _profilePicUrl = url;
+            });
+            ScaffoldMessenger.of(context).showSnackBar(
+               const SnackBar(content: Text('Profile picture updated!'))
+            );
+        }
+      }
+      
+      if (mounted) setState(() => _isUploading = false);
+    }
   }
 
   Future<void> _loadUsername() async {
@@ -99,23 +139,46 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     child: Row(
                       children: [
                         // Avatar
-                        Container(
-                          width: 70,
-                          height: 70,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: Colors.grey.withOpacity(0.3),
-                            image: const DecorationImage(
-                              image: AssetImage(
-                                'images/avatar_placeholder.png',
-                              ), // Fallback
-                              fit: BoxFit.cover,
-                            ),
-                          ),
-                          child: const Icon(
-                            Icons.person,
-                            size: 40,
-                            color: Colors.white54,
+                        GestureDetector(
+                          onTap: _pickAndUploadProfilePic,
+                          child: Stack(
+                            children: [
+                              Container(
+                                width: 70,
+                                height: 70,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: Colors.grey.withOpacity(0.3),
+                                  image: _profilePicUrl != null && _profilePicUrl!.isNotEmpty
+                                      ? DecorationImage(
+                                          image: NetworkImage(_profilePicUrl!),
+                                          fit: BoxFit.cover,
+                                        )
+                                      : null,
+                                ),
+                                child: _profilePicUrl == null || _profilePicUrl!.isEmpty
+                                    ? const Icon(Icons.person, size: 40, color: Colors.white54)
+                                    : null,
+                              ),
+                              if (_isUploading)
+                                const Positioned.fill(
+                                  child: Center(
+                                    child: CircularProgressIndicator(color: Color(0xFF00A884)),
+                                  ),
+                                ),
+                              Positioned(
+                                bottom: 0,
+                                right: 0,
+                                child: Container(
+                                  padding: const EdgeInsets.all(4),
+                                  decoration: const BoxDecoration(
+                                    color: Color(0xFF00A884),
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: const Icon(Icons.camera_alt, size: 14, color: Colors.white),
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                         const SizedBox(width: 16),

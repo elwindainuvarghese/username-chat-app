@@ -3,10 +3,13 @@ import 'new_chat_screen.dart';
 import 'calls_screen.dart';
 import 'settings_screen.dart'; // NEW
 import 'chat_screen.dart';
+import 'chat_requests_screen.dart';
 import 'image_detection_screen.dart';
+import 'anonymous_contact_picker.dart';
 import '../widgets/glass_container.dart';
 import '../services/auth_service.dart';
 import '../services/chat_service.dart';
+import '../services/connection_service.dart';
 import 'welcome_screen.dart';
 import '../main.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -21,10 +24,13 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   int _selectedIndex = 0;
   final AuthService _authService = AuthService();
+  final ChatService _chatService = ChatService();
+  final ConnectionService _connectionService = ConnectionService();
 
   @override
   void initState() {
     super.initState();
+    _connectionService.migrateLegacyContactsToConnections();
   }
 
   Future<void> _handleLogout() async {
@@ -293,58 +299,67 @@ class _HomeScreenState extends State<HomeScreen> {
                           },
                           child: Padding(
                             padding: const EdgeInsets.all(16),
-                            child: Row(
-                              children: [
-                                CircleAvatar(
-                                  radius: 25,
-                                  backgroundColor: Colors.white.withOpacity(
-                                    0.1,
-                                  ),
-                                  child: Icon(
-                                    Icons.person,
-                                    color: textColor.withOpacity(0.5),
-                                  ),
-                                ),
-                                const SizedBox(width: 15),
+                            child: StreamBuilder<DocumentSnapshot>(
+                              stream: FirebaseFirestore.instance.collection('users').doc(contact['uid']).snapshots(),
+                              builder: (context, userSnapshot) {
+                                String? profilePicUrl;
+                                if (userSnapshot.hasData && userSnapshot.data!.exists) {
+                                  profilePicUrl = (userSnapshot.data!.data() as Map<String, dynamic>)['profilePicUrl'] as String?;
+                                }
 
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        contact['displayName'] ??
-                                            'Unknown User',
-                                        style: TextStyle(
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 16,
-                                          color: textColor,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 4),
-                                      Text(
-                                        (contact['email'] as String?) ?? '',
-                                        style: TextStyle(
-                                          color: textColor.withOpacity(0.6),
-                                          fontSize: 14,
-                                        ),
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ],
-                                  ),
-                                ),
-
-                                Column(
-                                  crossAxisAlignment: CrossAxisAlignment.end,
+                                return Row(
                                   children: [
-                                    Icon(
-                                      Icons.chevron_right,
-                                      color: textColor.withOpacity(0.3),
+                                    CircleAvatar(
+                                      radius: 25,
+                                      backgroundColor: Colors.white.withOpacity(0.1),
+                                      backgroundImage: profilePicUrl != null && profilePicUrl.isNotEmpty
+                                          ? NetworkImage(profilePicUrl)
+                                          : null,
+                                      child: profilePicUrl == null || profilePicUrl.isEmpty
+                                          ? Icon(
+                                              Icons.person,
+                                              color: textColor.withOpacity(0.5),
+                                            )
+                                          : null,
+                                    ),
+                                    const SizedBox(width: 15),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            contact['displayName'] ?? 'Unknown User',
+                                            style: TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 16,
+                                              color: textColor,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 4),
+                                          Text(
+                                            (contact['email'] as String?) ?? '',
+                                            style: TextStyle(
+                                              color: textColor.withOpacity(0.6),
+                                              fontSize: 14,
+                                            ),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    Column(
+                                      crossAxisAlignment: CrossAxisAlignment.end,
+                                      children: [
+                                        Icon(
+                                          Icons.chevron_right,
+                                          color: textColor.withOpacity(0.3),
+                                        ),
+                                      ],
                                     ),
                                   ],
-                                ),
-                              ],
+                                );
+                              },
                             ),
                           ),
                         ),
@@ -459,6 +474,42 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                       ),
                       const Spacer(),
+                      // Chat Requests Badge Button
+                      StreamBuilder<int>(
+                        stream: _connectionService.incomingRequestCountStream(),
+                        builder: (context, snapshot) {
+                          final count = snapshot.data ?? 0;
+                          return IconButton(
+                            tooltip: 'Chat Requests',
+                            icon: Badge(
+                              isLabelVisible: count > 0,
+                              label: Text(
+                                count.toString(),
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 10,
+                                ),
+                              ),
+                              backgroundColor: Colors.redAccent,
+                              child: Icon(
+                                Icons.person_add_alt_1,
+                                color: count > 0
+                                    ? const Color(0xFF00A884)
+                                    : textColor,
+                              ),
+                            ),
+                            onPressed: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) =>
+                                      const ChatRequestsScreen(),
+                                ),
+                              );
+                            },
+                          );
+                        },
+                      ),
                       // Image Detection Button
                       IconButton(
                         tooltip: 'Detail AI',
@@ -497,12 +548,36 @@ class _HomeScreenState extends State<HomeScreen> {
                                 builder: (_) => const SettingsScreen(),
                               ),
                             );
+                          } else if (value == 'anonymous_chat') {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => const AnonymousContactPicker(),
+                              ),
+                            );
                           } else if (value == 'logout') {
                             _showLogoutDialog();
                           }
                         },
                         itemBuilder: (BuildContext context) =>
                             <PopupMenuEntry<String>>[
+                              PopupMenuItem<String>(
+                                value: 'anonymous_chat',
+                                child: Row(
+                                  children: [
+                                    Icon(
+                                      Icons.theater_comedy,
+                                      color: const Color(0xFF7C4DFF),
+                                      size: 20,
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Text(
+                                      'Anonymous Chat',
+                                      style: TextStyle(color: textColor),
+                                    ),
+                                  ],
+                                ),
+                              ),
                               PopupMenuItem<String>(
                                 value: 'settings',
                                 child: Row(

@@ -1,16 +1,12 @@
-import 'dart:io';
-import 'dart:typed_data';
-
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:file_picker/file_picker.dart';
-import 'package:image_picker/image_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_core/firebase_core.dart';
 import '../models/link_safety_result.dart';
 import '../services/chat_service.dart';
 import '../services/link_safety_service.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_core/firebase_core.dart';
+import '../widgets/full_screen_image_viewer.dart';
 
 class ChatScreen extends StatefulWidget {
   final String chatWithUser;
@@ -31,13 +27,14 @@ class _ChatScreenState extends State<ChatScreen> {
   final ScrollController _scrollController = ScrollController();
   final ChatService _chatService = ChatService();
   final LinkSafetyService _linkSafetyService = LinkSafetyService.instance;
-  final ImagePicker _picker = ImagePicker();
 
   final String _currentUid =
       FirebaseAuth.instanceFor(app: Firebase.app()).currentUser?.uid ?? '';
 
   late String _chatRoomId;
   String? _editingMessageId;
+
+  bool _isSending = false;
 
   @override
   void initState() {
@@ -46,28 +43,40 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   void _sendMessage() async {
-    if (_messageController.text.trim().isEmpty) return;
-
     final text = _messageController.text;
+    if (text.trim().isEmpty) return;
+
+    if (_isSending) return;
+
     final isEditing = _editingMessageId != null;
     final editingId = _editingMessageId;
 
-    _messageController.clear();
-    _editingMessageId = null;
-
-    if (isEditing && editingId != null) {
-      await _chatService.updateMessage(_chatRoomId, editingId, text);
+    try {
+      if (isEditing && editingId != null) {
+        await _chatService.updateMessage(_chatRoomId, editingId, text);
+        _messageController.clear();
+        _editingMessageId = null;
+        if (mounted) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(const SnackBar(content: Text('Message updated')));
+        }
+      } else {
+        await _chatService.sendMessage(
+          widget.receiverId,
+          widget.chatWithUser,
+          text,
+        );
+        _messageController.clear();
+      }
+    } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(const SnackBar(content: Text('Message updated')));
+        ).showSnackBar(SnackBar(content: Text('Error: $e')));
       }
-    } else {
-      await _chatService.sendMessage(
-        widget.receiverId,
-        widget.chatWithUser,
-        text,
-      );
+    } finally {
+      if (mounted) setState(() => _isSending = false);
     }
 
     if (mounted) setState(() {});
@@ -89,75 +98,7 @@ class _ChatScreenState extends State<ChatScreen> {
     });
   }
 
-  Future<void> _sendAttachment(
-    Uint8List fileBytes,
-    String filename,
-    String attachmentType,
-  ) async {
-    try {
-      await _chatService.sendAttachment(
-        widget.receiverId,
-        widget.chatWithUser,
-        fileBytes,
-        filename,
-        attachmentType,
-      );
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Sent $filename')));
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Failed to send $filename: $e')));
-      }
-    }
-  }
-
-  Future<void> _pickImage() async {
-    try {
-      final pickedFile = await _picker.pickImage(source: ImageSource.gallery);
-      if (pickedFile == null) return;
-
-      final bytes = await pickedFile.readAsBytes();
-      await _sendAttachment(bytes, pickedFile.name, 'image');
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Image send failed: $e')));
-      }
-    }
-  }
-
-  Future<void> _pickDocument() async {
-    try {
-      final result = await FilePicker.platform.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: ['pdf', 'doc', 'docx', 'ppt', 'pptx', 'xlsx', 'txt'],
-      );
-      if (result == null || result.files.isEmpty) return;
-
-      final picked = result.files.first;
-      Uint8List? bytes = picked.bytes;
-      if (bytes == null && picked.path != null) {
-        bytes = await File(picked.path!).readAsBytes();
-      }
-      if (bytes == null) return;
-
-      await _sendAttachment(bytes, picked.name, 'document');
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Document send failed: $e')));
-      }
-    }
-  }
-
-  Future<void> _showAttachmentOptions() async {
+  void _showForwardContacts(Map<String, dynamic> messageData) {
     if (!mounted) return;
 
     showModalBottomSheet(
@@ -166,101 +107,73 @@ class _ChatScreenState extends State<ChatScreen> {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
-      builder: (context) {
+      builder: (BuildContext sheetContext) {
         return Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            ListTile(
-              leading: const Icon(Icons.photo),
-              title: const Text('Send image'),
-              onTap: () {
-                Navigator.of(context).pop();
-                _pickImage();
-              },
+            const Padding(
+              padding: EdgeInsets.all(16.0),
+              child: Text(
+                'Forward to...',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
             ),
-            ListTile(
-              leading: const Icon(Icons.insert_drive_file),
-              title: const Text('Send document / PPT'),
-              onTap: () {
-                Navigator.of(context).pop();
-                _pickDocument();
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.download),
-              title: const Text('Download attachments'),
-              onTap: () {
-                Navigator.of(context).pop();
-                _showAttachmentLibrary();
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.close),
-              title: const Text('Cancel'),
-              onTap: () => Navigator.of(context).pop(),
-            ),
-          ],
-        );
-      },
-    );
-  }
+            Expanded(
+              child: StreamBuilder<QuerySnapshot>(
+                stream: _chatService.getContactsStream(),
+                builder: (streamContext, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+                  if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                    return const Center(child: Text("No contacts found."));
+                  }
 
-  Future<void> _showAttachmentLibrary() async {
-    final snapshot = await _chatService.getMessagesOnce(_chatRoomId);
-    final attachments = snapshot.docs.where((doc) {
-      final data = doc.data() as Map<String, dynamic>;
-      return data['attachmentUrl'] != null;
-    }).toList();
-
-    if (!mounted) return;
-
-    if (attachments.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No attachments found in this chat.')),
-      );
-      return;
-    }
-
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
-      builder: (context) {
-        return Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            for (final doc in attachments)
-              Builder(
-                builder: (context) {
-                  final data = doc.data() as Map<String, dynamic>;
-                  final url = data['attachmentUrl'] as String;
-                  final name =
-                      data['attachmentName'] as String? ?? 'Attachment';
-                  final type = data['attachmentType'] as String? ?? 'file';
-                  return ListTile(
-                    leading: Icon(
-                      type == 'image' ? Icons.photo : Icons.insert_drive_file,
-                    ),
-                    title: Text(name),
-                    subtitle: Text(type),
-                    onTap: () async {
-                      final uri = Uri.parse(url);
-                      if (await canLaunchUrl(uri)) {
-                        await launchUrl(
-                          uri,
-                          mode: LaunchMode.externalApplication,
-                        );
-                      }
+                  final contacts = snapshot.data!.docs;
+                  return ListView.builder(
+                    itemCount: contacts.length,
+                    itemBuilder: (listContext, index) {
+                      final contact =
+                          contacts[index].data() as Map<String, dynamic>;
+                      return ListTile(
+                        leading: CircleAvatar(
+                          backgroundColor: Colors.grey.shade800,
+                          child: const Icon(Icons.person, color: Colors.white),
+                        ),
+                        title: Text(
+                          contact['displayName'] ?? contact['email'] ?? 'User',
+                        ),
+                        onTap: () async {
+                          Navigator.pop(sheetContext);
+                          try {
+                            await _chatService.forwardMessage(
+                              contact['uid'],
+                              messageData,
+                            );
+                            if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(
+                                    'Message forwarded to ${contact['displayName'] ?? 'user'}',
+                                  ),
+                                ),
+                              );
+                            }
+                          } catch (e) {
+                            if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text('Failed to forward: $e'),
+                                ),
+                              );
+                            }
+                          }
+                        },
+                      );
                     },
                   );
                 },
               ),
-            ListTile(
-              leading: const Icon(Icons.close),
-              title: const Text('Cancel'),
-              onTap: () => Navigator.of(context).pop(),
             ),
           ],
         );
@@ -329,7 +242,9 @@ class _ChatScreenState extends State<ChatScreen> {
       builder: (dialogContext) {
         return AlertDialog(
           title: Text(
-            safetyResult.isUnsafe ? 'Unsafe link detected' : 'Link check unavailable',
+            safetyResult.isUnsafe
+                ? 'Unsafe link detected'
+                : 'Link check unavailable',
           ),
           content: Text(
             safetyResult.isUnsafe
@@ -359,13 +274,22 @@ class _ChatScreenState extends State<ChatScreen> {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
+    // Theme-aware colors
     final backgroundColor = isDark ? Colors.black : Colors.white;
     final surfaceColor = isDark
-        ? const Color(0xFF1A1A1A)
-        : const Color(0xFFF5F5F5);
-    final borderColor = isDark ? Colors.white24 : Colors.black12;
+        ? const Color(0xFF1E1E1E)
+        : const Color(0xFFF0F0F0);
+    final tealColor = const Color(0xFF2BBBAD);
+    final otherBubbleColor = isDark
+        ? const Color(0xFF2A2D33)
+        : const Color(0xFFEEEEEE);
+    final borderColor = isDark ? Colors.white12 : Colors.black12;
     final primaryTextColor = isDark ? Colors.white : Colors.black;
-    final secondaryTextColor = isDark ? Colors.white60 : Colors.black54;
+    final secondaryTextColor = isDark ? Colors.white60 : Colors.black45;
+    final sentTextColor = Colors.white;
+    final receivedTextColor = isDark ? Colors.white : Colors.black87;
+    final inputTextColor = isDark ? Colors.white : Colors.black;
+    final hintColor = isDark ? Colors.white60 : Colors.black38;
 
     return Scaffold(
       backgroundColor: backgroundColor,
@@ -374,8 +298,9 @@ class _ChatScreenState extends State<ChatScreen> {
           children: [
             // 🔹 TOP BAR
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
               decoration: BoxDecoration(
+                color: backgroundColor,
                 border: Border(bottom: BorderSide(color: borderColor)),
               ),
               child: Row(
@@ -384,7 +309,7 @@ class _ChatScreenState extends State<ChatScreen> {
                     icon: Icon(Icons.arrow_back, color: primaryTextColor),
                     onPressed: () => Navigator.pop(context),
                   ),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: 4),
                   Text(
                     widget.chatWithUser,
                     style: TextStyle(
@@ -403,15 +328,29 @@ class _ChatScreenState extends State<ChatScreen> {
                 stream: _chatService.getMessages(_chatRoomId),
                 builder: (context, snapshot) {
                   if (!snapshot.hasData) {
-                    return const Center(child: CircularProgressIndicator());
+                    return Center(
+                      child: CircularProgressIndicator(color: tealColor),
+                    );
                   }
 
                   final messages = snapshot.data!.docs;
 
+                  if (messages.isEmpty) {
+                    return Center(
+                      child: Text(
+                        'No messages yet. Say hi!',
+                        style: TextStyle(color: secondaryTextColor),
+                      ),
+                    );
+                  }
+
                   return ListView.builder(
                     controller: _scrollController,
                     reverse: true,
-                    padding: const EdgeInsets.all(16),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
                     itemCount: messages.length,
                     itemBuilder: (context, index) {
                       final msg =
@@ -420,14 +359,10 @@ class _ChatScreenState extends State<ChatScreen> {
 
                       final isMe = msg['senderId'] == _currentUid;
 
-                      final bubbleColor = isMe
-                          ? (isDark
-                                ? const Color(0xFF262A35)
-                                : const Color(0xFFE0F2F1))
-                          : surfaceColor;
+                      final bubbleColor = isMe ? tealColor : otherBubbleColor;
                       final textColor = isMe
-                          ? (isDark ? Colors.white : Colors.black)
-                          : primaryTextColor;
+                          ? sentTextColor
+                          : receivedTextColor;
 
                       return Align(
                         alignment: isMe
@@ -439,28 +374,64 @@ class _ChatScreenState extends State<ChatScreen> {
                                   messages[index].id,
                                   msg['text'] ?? '',
                                 )
-                              : null,
+                              : () => _showForwardContacts(msg),
                           child: Container(
-                            margin: const EdgeInsets.symmetric(vertical: 6),
-                            padding: const EdgeInsets.all(14),
+                            constraints: BoxConstraints(
+                              maxWidth:
+                                  MediaQuery.of(context).size.width * 0.70,
+                            ),
+                            margin: const EdgeInsets.symmetric(vertical: 4),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 8,
+                            ),
                             decoration: BoxDecoration(
                               color: bubbleColor,
-                              borderRadius: BorderRadius.circular(20),
+                              borderRadius: BorderRadius.only(
+                                topLeft: const Radius.circular(16),
+                                topRight: const Radius.circular(16),
+                                bottomLeft: Radius.circular(isMe ? 16 : 4),
+                                bottomRight: Radius.circular(isMe ? 4 : 16),
+                              ),
                             ),
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                if (messageText.isNotEmpty)
+                                if (msg['isForwarded'] == true)
                                   Padding(
-                                    padding: const EdgeInsets.only(bottom: 8.0),
-                                    child: _MessageTextWithLinks(
-                                      messageText: messageText,
-                                      textColor: textColor,
-                                      isDark: isDark,
-                                      linkSafetyService: _linkSafetyService,
-                                      onOpenUrl: _openMessageUrl,
+                                    padding: const EdgeInsets.only(bottom: 2.0),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(
+                                          Icons.forward,
+                                          size: 11,
+                                          color: isMe
+                                              ? Colors.white70
+                                              : secondaryTextColor,
+                                        ),
+                                        const SizedBox(width: 3),
+                                        Text(
+                                          'Forwarded',
+                                          style: TextStyle(
+                                            color: isMe
+                                                ? Colors.white70
+                                                : secondaryTextColor,
+                                            fontSize: 11,
+                                            fontStyle: FontStyle.italic,
+                                          ),
+                                        ),
+                                      ],
                                     ),
+                                  ),
+                                if (messageText.isNotEmpty)
+                                  _MessageTextWithLinks(
+                                    messageText: messageText,
+                                    textColor: textColor,
+                                    isDark: isDark,
+                                    linkSafetyService: _linkSafetyService,
+                                    onOpenUrl: _openMessageUrl,
                                   ),
                                 if (messageText.isNotEmpty)
                                   _MessageLinkSafetyIndicators(
@@ -473,59 +444,194 @@ class _ChatScreenState extends State<ChatScreen> {
                                     onTap: () async {
                                       final url =
                                           msg['attachmentUrl'] as String;
-                                      final uri = Uri.parse(url);
-                                      if (await canLaunchUrl(uri)) {
-                                        await launchUrl(
-                                          uri,
-                                          mode: LaunchMode.externalApplication,
+                                      if (msg['attachmentType'] == 'image') {
+                                        Navigator.push(
+                                          context,
+                                          MaterialPageRoute(
+                                            builder: (_) =>
+                                                FullScreenImageViewer(
+                                                  imageUrl: url,
+                                                  fileName:
+                                                      msg['attachmentName'] ??
+                                                      'Image',
+                                                ),
+                                          ),
                                         );
+                                      } else {
+                                        final uri = Uri.parse(url);
+                                        if (await canLaunchUrl(uri)) {
+                                          await launchUrl(
+                                            uri,
+                                            mode:
+                                                LaunchMode.externalApplication,
+                                          );
+                                        }
                                       }
                                     },
-                                    child: Container(
-                                      constraints: const BoxConstraints(
-                                        maxWidth: 260,
-                                      ),
-                                      padding: const EdgeInsets.all(12),
-                                      decoration: BoxDecoration(
-                                        color: isMe
-                                            ? (isDark
-                                                  ? const Color(0xFF1F2430)
-                                                  : const Color(0xFFD7F0EA))
-                                            : const Color(0xFF2A2A2A),
-                                        borderRadius: BorderRadius.circular(16),
-                                      ),
-                                      child: Row(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.center,
-                                        children: [
-                                          Icon(
-                                            msg['attachmentType'] == 'image'
-                                                ? Icons.photo
-                                                : Icons.insert_drive_file,
-                                            color: isMe
-                                                ? (isDark
-                                                      ? Colors.white
-                                                      : Colors.black)
-                                                : Colors.white,
-                                          ),
-                                          const SizedBox(width: 10),
-                                          Expanded(
-                                            child: Text(
-                                              msg['attachmentName'] ??
-                                                  'Attachment',
-                                              style: TextStyle(
-                                                color: isMe
-                                                    ? (isDark
-                                                          ? Colors.white
-                                                          : Colors.black)
-                                                    : Colors.white,
-                                                fontWeight: FontWeight.w500,
+                                    child: msg['attachmentType'] == 'image'
+                                        ? Container(
+                                            constraints: const BoxConstraints(
+                                              maxWidth: 240,
+                                              maxHeight: 300,
+                                            ),
+                                            child: ClipRRect(
+                                              borderRadius:
+                                                  BorderRadius.circular(12),
+                                              child: Hero(
+                                                tag:
+                                                    msg['attachmentUrl']
+                                                        as String,
+                                                child: Image.network(
+                                                  msg['attachmentUrl']
+                                                      as String,
+                                                  fit: BoxFit.cover,
+                                                  loadingBuilder:
+                                                      (
+                                                        context,
+                                                        child,
+                                                        loadingProgress,
+                                                      ) {
+                                                        if (loadingProgress ==
+                                                            null)
+                                                          return child;
+                                                        return const SizedBox(
+                                                          width: 50,
+                                                          height: 50,
+                                                          child: Center(
+                                                            child:
+                                                                CircularProgressIndicator(),
+                                                          ),
+                                                        );
+                                                      },
+                                                ),
                                               ),
                                             ),
+                                          )
+                                        : Container(
+                                            constraints: const BoxConstraints(
+                                              maxWidth: 260,
+                                            ),
+                                            padding: const EdgeInsets.all(10),
+                                            decoration: BoxDecoration(
+                                              color: isDark
+                                                  ? Colors.white.withValues(
+                                                      alpha: 0.08,
+                                                    )
+                                                  : Colors.black.withValues(
+                                                      alpha: 0.05,
+                                                    ),
+                                              borderRadius:
+                                                  BorderRadius.circular(12),
+                                            ),
+                                            child: Column(
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.start,
+                                              children: [
+                                                Row(
+                                                  children: [
+                                                    Icon(
+                                                      msg['attachmentType'] ==
+                                                              'video'
+                                                          ? Icons.videocam
+                                                          : (msg['attachmentType'] ==
+                                                                    'audio'
+                                                                ? Icons
+                                                                      .audiotrack
+                                                                : Icons
+                                                                      .insert_drive_file),
+                                                      color: textColor,
+                                                      size: 20,
+                                                    ),
+                                                    const SizedBox(width: 6),
+                                                    Expanded(
+                                                      child: Text(
+                                                        msg['attachmentName'] ??
+                                                            'File',
+                                                        style: TextStyle(
+                                                          color: textColor,
+                                                          fontWeight:
+                                                              FontWeight.bold,
+                                                          fontSize: 13,
+                                                        ),
+                                                        maxLines: 1,
+                                                        overflow: TextOverflow
+                                                            .ellipsis,
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                                const SizedBox(height: 6),
+                                                SizedBox(
+                                                  width: double.infinity,
+                                                  child: TextButton.icon(
+                                                    onPressed: () async {
+                                                      final url =
+                                                          msg['attachmentUrl']
+                                                              as String;
+                                                      final uri = Uri.parse(
+                                                        url,
+                                                      );
+                                                      if (await canLaunchUrl(
+                                                        uri,
+                                                      )) {
+                                                        await launchUrl(
+                                                          uri,
+                                                          mode: LaunchMode
+                                                              .externalApplication,
+                                                        );
+                                                      }
+                                                    },
+                                                    style: TextButton.styleFrom(
+                                                      backgroundColor: textColor
+                                                          .withValues(
+                                                            alpha: 0.1,
+                                                          ),
+                                                      foregroundColor:
+                                                          textColor,
+                                                      padding:
+                                                          const EdgeInsets.symmetric(
+                                                            vertical: 6,
+                                                          ),
+                                                      shape: RoundedRectangleBorder(
+                                                        borderRadius:
+                                                            BorderRadius.circular(
+                                                              8,
+                                                            ),
+                                                      ),
+                                                    ),
+                                                    icon: Icon(
+                                                      msg['attachmentType'] ==
+                                                                  'pdf' ||
+                                                              (msg['attachmentName'] ??
+                                                                      '')
+                                                                  .toLowerCase()
+                                                                  .endsWith(
+                                                                    '.pdf',
+                                                                  )
+                                                          ? Icons.picture_as_pdf
+                                                          : Icons.open_in_new,
+                                                      size: 16,
+                                                    ),
+                                                    label: Text(
+                                                      msg['attachmentType'] ==
+                                                                  'pdf' ||
+                                                              (msg['attachmentName'] ??
+                                                                      '')
+                                                                  .toLowerCase()
+                                                                  .endsWith(
+                                                                    '.pdf',
+                                                                  )
+                                                          ? '📄 Open PDF'
+                                                          : 'Open File',
+                                                      style: const TextStyle(
+                                                        fontSize: 12,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
                                           ),
-                                        ],
-                                      ),
-                                    ),
                                   ),
                               ],
                             ),
@@ -540,58 +646,60 @@ class _ChatScreenState extends State<ChatScreen> {
 
             // 🔹 INPUT
             Container(
-              padding: const EdgeInsets.all(12),
+              padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+              decoration: BoxDecoration(
+                color: backgroundColor,
+                border: Border(top: BorderSide(color: borderColor)),
+              ),
               child: Row(
                 children: [
-                  Container(
-                    decoration: BoxDecoration(
-                      color: surfaceColor,
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    child: IconButton(
-                      icon: Icon(Icons.attach_file, color: primaryTextColor),
-                      onPressed: _showAttachmentOptions,
-                      tooltip: 'Send image or document',
-                    ),
-                  ),
-                  const SizedBox(width: 8),
                   Expanded(
-                    child: TextField(
-                      controller: _messageController,
-                      style: TextStyle(color: primaryTextColor),
-                      decoration: InputDecoration(
-                        hintText: "Message",
-                        hintStyle: TextStyle(color: secondaryTextColor),
-                        filled: true,
-                        fillColor: surfaceColor,
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 14,
-                        ),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(20),
-                          borderSide: BorderSide(color: borderColor),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(20),
-                          borderSide: BorderSide(color: borderColor),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(20),
-                          borderSide: BorderSide(color: primaryTextColor),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: surfaceColor,
+                        borderRadius: BorderRadius.circular(28),
+                      ),
+                      child: TextField(
+                        controller: _messageController,
+                        style: TextStyle(color: inputTextColor),
+                        decoration: InputDecoration(
+                          hintText: "Message",
+                          hintStyle: TextStyle(color: hintColor),
+                          border: InputBorder.none,
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 20,
+                            vertical: 12,
+                          ),
                         ),
                       ),
                     ),
                   ),
-                  Container(
-                    decoration: BoxDecoration(
-                      color: surfaceColor,
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    child: IconButton(
-                      icon: Icon(Icons.send, color: primaryTextColor),
-                      onPressed: _sendMessage,
-                      tooltip: 'Send message',
+                  const SizedBox(width: 8),
+                  GestureDetector(
+                    onTap: _sendMessage,
+                    child: Container(
+                      width: 48,
+                      height: 48,
+                      decoration: BoxDecoration(
+                        color: tealColor,
+                        shape: BoxShape.circle,
+                      ),
+                      child: _isSending
+                          ? const Center(
+                              child: SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            )
+                          : const Icon(
+                              Icons.send,
+                              color: Colors.white,
+                              size: 22,
+                            ),
                     ),
                   ),
                 ],
@@ -654,7 +762,8 @@ class _MessageTextWithLinks extends StatelessWidget {
     BuildContext context,
     String url,
     LinkSafetyResult? safetyResult,
-  ) onOpenUrl;
+  )
+  onOpenUrl;
 
   const _MessageTextWithLinks({
     required this.messageText,
@@ -674,8 +783,10 @@ class _MessageTextWithLinks extends StatelessWidget {
     return FutureBuilder<List<LinkSafetyResult>>(
       future: linkSafetyService.checkMessageLinks(messageText),
       builder: (context, snapshot) {
-        final Map<String, LinkSafetyResult> safetyByUrl = <String, LinkSafetyResult>{};
-        final List<LinkSafetyResult> results = snapshot.data ?? const <LinkSafetyResult>[];
+        final Map<String, LinkSafetyResult> safetyByUrl =
+            <String, LinkSafetyResult>{};
+        final List<LinkSafetyResult> results =
+            snapshot.data ?? const <LinkSafetyResult>[];
         for (final result in results) {
           safetyByUrl[result.url] = result;
         }
@@ -687,7 +798,8 @@ class _MessageTextWithLinks extends StatelessWidget {
           final int start = match.start;
           final int end = match.end;
           final String rawUrl = messageText.substring(start, end);
-          final List<String> normalizedCandidates = linkSafetyService.extractUrls(rawUrl);
+          final List<String> normalizedCandidates = linkSafetyService
+              .extractUrls(rawUrl);
           final String normalizedUrl = normalizedCandidates.isNotEmpty
               ? normalizedCandidates.first
               : _normalizeUrlForDisplay(rawUrl);
@@ -772,8 +884,8 @@ class _ClickableMessageLink extends StatelessWidget {
     final Color linkColor = safetyResult == null
         ? Colors.blueAccent
         : safetyResult!.isUnsafe
-            ? Colors.redAccent
-            : Colors.blueAccent;
+        ? Colors.redAccent
+        : Colors.blueAccent;
 
     return InkWell(
       onTap: onTap,
